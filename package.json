@@ -1,0 +1,22 @@
+{
+  "name": "java-path",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "bun test --timeout 30000",
+    "dev": "bun --hot src/index.ts",
+    "typecheck": "bunx tsc --noEmit",
+    "build": "bun build ./index.ts --outdir ./dist --target node",
+    "example": "bun run examples/basic-usage.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "node-task-manager": "^2.1.5"
+  }
+}
