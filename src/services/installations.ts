@@ -1,19 +1,9 @@
 import path from "node:path";
-import {
-  getFolderDetails,
-  getDirectoriesOnly,
-  type FileDetails,
-} from "../utils/folder.js";
+import fs from "node:fs/promises";
 import { env } from "../platforms/env.js";
 import { FileUtils } from "../utils/file.js";
-import {
-  createSuccessResponse,
-  createErrorResponse,
-  isSuccess,
-} from "../utils/validator.js";
-// ─────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────
+import { isSuccess } from "../utils/validator.js";
+
 export interface InstalledJavaVersion {
   featureVersion: number; // e.g. 8, 11, 17, 21
   folderName: string; // e.g. "jdk-21.0.3+9" or "8_x86_64_windows"
@@ -30,17 +20,15 @@ export interface InstalledJavaVersion {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Extrae la versión de Java del nombre de carpeta
+ * Extracts Java version from a folder name.
  */
 function extractJavaVersion(folderName: string): number | null {
-  // Patrones comunes:
-  // "jdk-8u452+09", "jdk-21.0.3+9", "8_x86_64_windows", "java-11-openjdk"
   const patterns = [
     /jdk-?(\d+)(?:u\d+)?(?:\.[\d.]+)?(?:\+\d+)?/i, // jdk-8u452, jdk-21.0.3+9
     /^(\d+)_/, // 8_x86_64_windows
     /java-(\d+)-/i, // java-11-openjdk
     /openjdk-?(\d+)/i, // openjdk-17, openjdk17
-    /^(\d+)$/, // solo números: 8, 11, 17
+    /^(\d+)$/, // just a number: 8, 11, 17
   ];
 
   for (const pattern of patterns) {
@@ -49,18 +37,17 @@ function extractJavaVersion(folderName: string): number | null {
       return parseInt(match[1]!, 10);
     }
   }
-
   return null;
 }
 
 /**
- * Detecta arquitectura y OS del nombre de carpeta
+ * Extracts architecture and OS from a folder name.
  */
 function extractArchAndOS(folderName: string): { arch: string; os: string } {
   const lowerName = folderName.toLowerCase();
 
-  // Detectar arquitectura
-  let arch = env.arch; // default actual
+  // Detect architecture
+  let arch = env.arch; // default current
   if (lowerName.includes("x64") || lowerName.includes("x86_64")) {
     arch = "x86_64";
   } else if (lowerName.includes("x32") || lowerName.includes("x86")) {
@@ -71,8 +58,8 @@ function extractArchAndOS(folderName: string): { arch: string; os: string } {
     arch = "arm";
   }
 
-  // Detectar OS
-  let os = env.platform.name; // default actual
+  // Detect OS
+  let os = env.platform.name; // default current
   if (lowerName.includes("windows") || lowerName.includes("win")) {
     os = "windows";
   } else if (lowerName.includes("linux")) {
@@ -87,7 +74,7 @@ function extractArchAndOS(folderName: string): { arch: string; os: string } {
 }
 
 /**
- * Construye la ruta al ejecutable de Java según la plataforma
+ * Builds the path to the Java executable based on the platform.
  */
 function getJavaExecutablePath(binPath: string): string {
   const executable = env.isWindows() ? "java.exe" : "java";
@@ -99,43 +86,97 @@ function getJavaExecutablePath(binPath: string): string {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Escanea una carpeta específica y retorna todas las versiones de Java encontradas
+ * Scans a folder recursively for Java installations.
+ * It looks for java executables and deduces the installation root.
  */
 export async function scanJavaInstallations(
   basePath: string,
 ): Promise<InstalledJavaVersion[]> {
   try {
-    // Obtener solo directorios del primer nivel
-    const directories = await getDirectoriesOnly(basePath, "", {
-      recursive: false,
-      includeHidden: false,
-      sortBy: "name",
-      sortOrder: "asc",
-    });
+    // Ensure base path exists
+    const exists = await FileUtils.pathExists(basePath);
+    if (!isSuccess(exists) || !exists.data) {
+      console.warn(`Base path does not exist: ${basePath}`);
+      return [];
+    }
 
-    const javaVersions: InstalledJavaVersion[] = [];
+    const javaExecutableName = env.isWindows() ? "java.exe" : "java";
+    const homes = new Map<string, InstalledJavaVersion>();
 
-    for (const dir of directories) {
-      const featureVersion = extractJavaVersion(dir.name);
+    /**
+     * Recursively find all java executables under a directory.
+     */
+    async function findExecutables(dir: string): Promise<string[]> {
+      const results: string[] = [];
+      try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            // Skip hidden directories
+            if (entry.name.startsWith('.')) continue;
+            results.push(...await findExecutables(fullPath));
+          } else if (entry.isFile() && entry.name === javaExecutableName) {
+            results.push(fullPath);
+          }
+          // Ignore symlinks etc.
+        }
+      } catch (err) {
+        console.error(`Error reading directory ${dir}:`, err);
+      }
+      return results;
+    }
 
-      // Si no se puede extraer versión, skip
-      if (featureVersion === null) continue;
-      const { arch, os } = extractArchAndOS(dir.name);
-      // Verificar si existe el ejecutable de Java
-      const ValidVersion = await verifyJavaVersionPath(dir, featureVersion);
+    const executables = await findExecutables(basePath);
 
-      javaVersions.push({
+    for (const execPath of executables) {
+      // Derive bin and install paths
+      const binPath = path.dirname(execPath);
+      let installPath = path.dirname(binPath);
+      let folderName = path.basename(installPath);
+      let featureVersion = extractJavaVersion(folderName);
+
+      // If version not found in immediate parent, try going up a few levels
+      // (useful for macOS where bin is under Contents/Home)
+      if (featureVersion === null) {
+        let candidate = installPath;
+        for (let i = 0; i < 3; i++) {
+          candidate = path.dirname(candidate);
+          const version = extractJavaVersion(path.basename(candidate));
+          if (version !== null) {
+            featureVersion = version;
+            folderName = path.basename(candidate);
+            installPath = candidate;
+            break;
+          }
+        }
+      }
+
+      if (featureVersion === null) {
+        // Could not determine version, skip this installation
+        continue;
+      }
+
+      // Avoid duplicates (same installPath)
+      if (homes.has(installPath)) continue;
+
+      const { arch, os } = extractArchAndOS(folderName);
+
+      homes.set(installPath, {
         featureVersion,
-        folderName: dir.name,
-        installPath: dir.absolutePath,
+        folderName,
+        installPath,
+        binPath,
+        javaExecutable: execPath,
         arch,
         os,
-        ...ValidVersion,
+        isValid: true, // since we found the executable
       });
     }
 
-    // Ordenar por versión (más nueva primero)
-    return javaVersions.sort((a, b) => b.featureVersion - a.featureVersion);
+    // Sort by version descending
+    return Array.from(homes.values())
+      .sort((a, b) => b.featureVersion - a.featureVersion);
   } catch (error) {
     console.error(`Error scanning Java installations in ${basePath}:`, error);
     return [];
@@ -143,15 +184,15 @@ export async function scanJavaInstallations(
 }
 
 /**
- * Busca una versión específica de Java en la carpeta y verifica compatibilidad
+ * Finds a specific Java version.
  */
 export async function findJavaVersion(
   basePath: string,
   targetVersion: number,
   options: {
-    requireSameArch?: boolean; // Solo versiones compatibles con arch actual
-    requireSameOS?: boolean; // Solo versiones compatibles con OS actual
-    requireValid?: boolean; // Solo versiones con ejecutable válido
+    requireSameArch?: boolean;
+    requireSameOS?: boolean;
+    requireValid?: boolean;
   } = {},
 ): Promise<InstalledJavaVersion | null> {
   const {
@@ -162,60 +203,16 @@ export async function findJavaVersion(
 
   try {
     const allVersions = await scanJavaInstallations(basePath);
-
-    // Filtrar por versión específica
-    const candidates = allVersions.filter((java) => {
-      if (java.featureVersion !== targetVersion) return false;
-      if (requireValid && !java.isValid) return false;
-      if (requireSameArch && java.arch !== env.arch) return false;
-      if (requireSameOS && java.os !== env.platform.name) return false;
-
-      return true;
-    });
-
-    // Retornar el primer candidato válido (ya están ordenados)
-    return candidates[0] || null;
+    for (const java of allVersions) {
+      if (java.featureVersion !== targetVersion) continue;
+      if (requireValid && !java.isValid) continue;
+      if (requireSameArch && java.arch !== env.arch) continue;
+      if (requireSameOS && java.os !== env.platform.name) continue;
+      return java;
+    }
+    return null;
   } catch (error) {
-    console.error(
-      `Error finding Java version ${targetVersion} in ${basePath}:`,
-      error,
-    );
+    console.error(`Error finding Java version ${targetVersion} in ${basePath}:`, error);
     return null;
   }
-}
-// verificar en un array de objetos si existe un archivo con nombre startwith jdk${targetVersion} and join o si no existe retornal la path actual
-async function verifyJavaVersionPath(
-  dir: FileDetails,
-  targetVersion: number,
-): Promise<{
-  javaExecutable: string;
-  binPath: string;
-  isValid: boolean;
-}> {
-  let binPath = path.join(dir.absolutePath, "bin");
-  let javaPath = binPath;
-  const validation = await FileUtils.pathExists(binPath);
-  if (isSuccess(validation)) {
-    const subdirectories = await getFolderDetails(dir.absolutePath, "", {
-      recursive: false,
-      includeHidden: false,
-      includeDotFiles: true,
-    });
-    subdirectories.forEach((subdir) => {
-      if (
-        subdir.name.startsWith(`jdk`) &&
-        subdir.name.includes(targetVersion.toString())
-      ) {
-        javaPath = path.join(subdir.absolutePath, "bin");
-      }
-    });
-  }
-  const ExecutablePath = getJavaExecutablePath(javaPath);
-  const isValid = await FileUtils.pathExists(ExecutablePath);
-  const result = {
-    javaExecutable: ExecutablePath,
-    binPath,
-    isValid: isSuccess(isValid),
-  };
-  return result;
 }

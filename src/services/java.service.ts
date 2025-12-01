@@ -129,7 +129,7 @@ const _getJavaInfoByVersion = async (
   const filename = `Java-${versionStr}-${arch}${env.platform.ext}`;
 
   const relativeDownloadPath = path.join(defaultPaths.downloadPath, filename);
-  const relativeUnpackPath = path.join(defaultPaths.backupPath, `jdk-${versionStr}`);
+  const relativeUnpackPath = path.join(defaultPaths.unpackPath, `jdk-${versionStr}`);
   const absoluteDownloadPath = path.resolve(relativeDownloadPath);
   const absoluteUnpackPath = path.resolve(relativeUnpackPath);
 
