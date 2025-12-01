@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import fs from "node:fs/promises";
 import {
   scanJavaInstallations,
   findJavaVersion,
@@ -58,20 +59,15 @@ describe("Java installations service", () => {
 
     for (const dir of javaDirs) {
       const dirPath = join(testDir, dir);
-      await Bun.$`mkdir -p ${dirPath}`;
+      await fs.mkdir(dirPath, { recursive: true });
 
       // Create a bin directory
       const binPath = join(dirPath, "bin");
-      await Bun.$`mkdir -p ${binPath}`;
+      await fs.mkdir(binPath, { recursive: true });
 
       // Create the java executable
       const javaPath = join(binPath, env.isWindows() ? "java.exe" : "java");
-      await FileUtils.writeFile(
-        testDir,
-        dir,
-        env.isWindows() ? "java.exe" : "java",
-        "fake java executable",
-      );
+      await fs.writeFile(javaPath, "fake java executable");
     }
 
     const installations = await scanJavaInstallations(testDir);
@@ -116,39 +112,30 @@ describe("Java installations service", () => {
   it("should handle complex Java directory structures", async () => {
     // Create a Java installation with a complex structure (like macOS)
     const jdkDir = join(testDir, "jdk-17.0.2+8");
-    await Bun.$`mkdir -p ${jdkDir}`;
+    await fs.mkdir(jdkDir, { recursive: true });
 
     // macOS-style structure
     const contentsDir = join(jdkDir, "Contents");
-    await Bun.$`mkdir -p ${contentsDir}`;
+    await fs.mkdir(contentsDir, { recursive: true });
 
     const homeDir = join(contentsDir, "Home");
-    await Bun.$`mkdir -p ${homeDir}`;
+    await fs.mkdir(homeDir, { recursive: true });
 
     const binDir = join(homeDir, "bin");
-    await Bun.$`mkdir -p ${binDir}`;
+    await fs.mkdir(binDir, { recursive: true });
 
-    // Create the java executable
-    await FileUtils.writeFile(
-      testDir,
-      "jdk-17.0.2+8",
-      "Contents/Home/bin/java",
-      "fake java executable",
-    );
+    // Create the java executable with correct extension for platform
+    const javaExecutableName = env.isWindows() ? "java.exe" : "java";
+    await fs.writeFile(join(binDir, javaExecutableName), "fake java executable");
 
     // Create another Java installation with a simpler structure
     const jdkDir2 = join(testDir, "jdk-11.0.2");
-    await Bun.$`mkdir -p ${jdkDir2}`;
+    await fs.mkdir(jdkDir2, { recursive: true });
 
     const binDir2 = join(jdkDir2, "bin");
-    await Bun.$`mkdir -p ${binDir2}`;
+    await fs.mkdir(binDir2, { recursive: true });
 
-    await FileUtils.writeFile(
-      testDir,
-      "jdk-11.0.2",
-      "bin/java",
-      "fake java executable",
-    );
+    await fs.writeFile(join(binDir2, javaExecutableName), "fake java executable");
 
     const installations = await scanJavaInstallations(testDir);
 
@@ -203,18 +190,13 @@ describe("Java installations service", () => {
 
     for (const version of versions) {
       const jdkDir = join(testDir, `jdk-${version}.0.0`);
-      await Bun.$`mkdir -p ${jdkDir}`;
+      await fs.mkdir(jdkDir, { recursive: true });
 
       const binPath = join(jdkDir, "bin");
-      await Bun.$`mkdir -p ${binPath}`;
+      await fs.mkdir(binPath, { recursive: true });
 
       const javaPath = join(binPath, env.isWindows() ? "java.exe" : "java");
-      await FileUtils.writeFile(
-        testDir,
-        `jdk-${version}.0.0`,
-        env.isWindows() ? "bin/java.exe" : "bin/java",
-        "fake java executable",
-      );
+      await fs.writeFile(javaPath, "fake java executable");
     }
 
     // Find a specific version
@@ -238,18 +220,13 @@ describe("Java installations service", () => {
     for (const inst of installations) {
       const folderName = `jdk-${inst.version}-${inst.arch}-${inst.os}`;
       const jdkDir = join(testDir, folderName);
-      await Bun.$`mkdir -p ${jdkDir}`;
+      await fs.mkdir(jdkDir, { recursive: true });
 
       const binPath = join(jdkDir, "bin");
-      await Bun.$`mkdir -p ${binPath}`;
+      await fs.mkdir(binPath, { recursive: true });
 
       const javaPath = join(binPath, env.isWindows() ? "java.exe" : "java");
-      await FileUtils.writeFile(
-        testDir,
-        folderName,
-        env.isWindows() ? "bin/java.exe" : "bin/java",
-        "fake java executable",
-      );
+      await fs.writeFile(javaPath, "fake java executable");
     }
 
     // Find Java 11 for the current architecture
@@ -287,18 +264,13 @@ describe("Java installations service", () => {
   it("should handle errors gracefully", async () => {
     // Create a directory with some Java installations
     const jdkDir = join(testDir, "jdk-17.0.2+8");
-    await Bun.$`mkdir -p ${jdkDir}`;
+    await fs.mkdir(jdkDir, { recursive: true });
 
     const binPath = join(jdkDir, "bin");
-    await Bun.$`mkdir -p ${binPath}`;
+    await fs.mkdir(binPath, { recursive: true });
 
     const javaPath = join(binPath, env.isWindows() ? "java.exe" : "java");
-    await FileUtils.writeFile(
-      testDir,
-      "jdk-17.0.2+8",
-      env.isWindows() ? "bin/java.exe" : "bin/java",
-      "fake java executable",
-    );
+    await fs.writeFile(javaPath, "fake java executable");
 
     // Scan the directory successfully first
     const installations = await scanJavaInstallations(testDir);

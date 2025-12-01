@@ -88,6 +88,8 @@ function getJavaExecutablePath(binPath: string): string {
 /**
  * Scans a folder recursively for Java installations.
  * It looks for java executables and deduces the installation root.
+ * Also detects directories that look like Java installations even without executables,
+ * marking them as invalid.
  */
 export async function scanJavaInstallations(
   basePath: string,
@@ -127,8 +129,30 @@ export async function scanJavaInstallations(
       return results;
     }
 
-    const executables = await findExecutables(basePath);
+    /**
+     * Recursively find all directories under a directory.
+     */
+    async function findDirectories(dir: string): Promise<string[]> {
+      const dirs: string[] = [];
+      try {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            // Skip hidden directories
+            if (entry.name.startsWith('.')) continue;
+            const fullPath = path.join(dir, entry.name);
+            dirs.push(fullPath);
+            dirs.push(...await findDirectories(fullPath));
+          }
+        }
+      } catch (err) {
+        console.error(`Error reading directory ${dir}:`, err);
+      }
+      return dirs;
+    }
 
+    // First pass: find all java executables and create valid installations
+    const executables = await findExecutables(basePath);
     for (const execPath of executables) {
       // Derive bin and install paths
       const binPath = path.dirname(execPath);
@@ -172,6 +196,57 @@ export async function scanJavaInstallations(
         os,
         isValid: true, // since we found the executable
       });
+    }
+
+    // Second pass: find directories that look like Java installations but have no executable
+    const allDirs = await findDirectories(basePath);
+    for (const dir of allDirs) {
+      const folderName = path.basename(dir);
+      const featureVersion = extractJavaVersion(folderName);
+      if (featureVersion === null) {
+        continue;
+      }
+      // Already have this installation (from executable pass)
+      if (homes.has(dir)) continue;
+
+      // Determine possible bin paths
+      const standardBin = path.join(dir, "bin");
+      const macBin = path.join(dir, "Contents", "Home", "bin");
+      let binPath = standardBin;
+      let javaExecutable = getJavaExecutablePath(standardBin);
+      
+      // Check if the directory structure resembles macOS layout
+      let isMacLayout = false;
+      try {
+        const macBinStat = await fs.stat(macBin);
+        if (macBinStat.isDirectory()) {
+          binPath = macBin;
+          javaExecutable = getJavaExecutablePath(macBin);
+          isMacLayout = true;
+        }
+      } catch {}
+
+      // Check if executable exists
+      let isValid = false;
+      try {
+        await fs.access(javaExecutable);
+        isValid = true;
+      } catch {}
+
+      // Only add if we haven't already added this installPath (should not happen)
+      if (!homes.has(dir)) {
+        const { arch, os } = extractArchAndOS(folderName);
+        homes.set(dir, {
+          featureVersion,
+          folderName,
+          installPath: dir,
+          binPath,
+          javaExecutable,
+          arch,
+          os,
+          isValid,
+        });
+      }
     }
 
     // Sort by version descending
