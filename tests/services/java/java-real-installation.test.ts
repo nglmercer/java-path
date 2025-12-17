@@ -364,6 +364,6 @@ describe("Java Real Installation Test (sin mocks)", () => {
 });
 
 // Helper function to check if a response is successful
-function isSuccess(response: any): response is { success: true; data: any } {
+function isSuccess<T>(response: { success: boolean; data: T }): response is { success: true; data: T } {
   return response && response.success === true;
 }

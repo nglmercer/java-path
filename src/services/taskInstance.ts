@@ -25,7 +25,7 @@ function recreateTaskManager() {
 }
 
 // Function to attach event listeners
-function attachEventListeners() {
+function attachEventListeners(logger?: boolean) {
   const TaskEventsNames: (keyof TaskEvents)[] = [
     "task:created",
     "task:started",

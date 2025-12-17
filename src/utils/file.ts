@@ -8,31 +8,10 @@ import {
   type ServiceResponse,
 } from "./validator.js";
 // --- Constantes ---
-export const ALLOWED_EXTENSIONS = [
-  ".txt",
-  ".log",
-  ".json",
-  ".yaml",
-  ".yml",
-  ".ini",
-  ".conf",
-  ".properties",
-  ".env",
-  ".csv",
-  ".tsv",
-  ".md",
-  ".xml",
-  ".mcfunction",
-  ".sh",
-  ".bash",
-  ".bat",
-  ".zsh",
-  ".ps1",
-  ".jpg",
-  ".png",
-  ".jar",
-  ".gz", // Aseguramos que todas tengan punto
-];
+import { ALLOWED_FILE_EXTENSIONS } from "../constants.js";
+
+// --- Constantes ---
+export const ALLOWED_EXTENSIONS = ALLOWED_FILE_EXTENSIONS;
 
 // --- Tipos y Helpers Fundamentales ---
 

@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-// Interface mejorada con más información útil
 interface FileDetails {
   name: string;
   path: string;
@@ -11,20 +10,17 @@ interface FileDetails {
   modified: string;
   modifiedDate: Date;
   created: string;
-  createdDate: Date; // Agregado para consistencia
+  createdDate: Date; 
   accessed: string;
-  accessedDate: Date; // Agregado para consistencia
+  accessedDate: Date; 
   isDirectory: boolean;
   extension?: string;
   permissions: string;
   isHidden: boolean;
-  // Nuevas propiedades
-  mimeType?: string; // Tipo MIME estimado
-  relativePath: string; // Ruta relativa desde el directorio base
-  depth: number; // Profundidad en la estructura de carpetas
+  mimeType?: string; 
+  relativePath: string; 
+  depth: number; 
 }
-
-// Nueva interface para stats individuales
 interface FileStats extends Omit<FileDetails, "relativePath" | "depth"> {
   parentDirectory: string;
   isSymbolicLink: boolean;
@@ -35,7 +31,6 @@ interface FileStats extends Omit<FileDetails, "relativePath" | "depth"> {
   ino: number;
 }
 
-// Opciones mejoradas
 interface GetFolderOptions {
   includeDirectories?: boolean;
   includeFiles?: boolean;
@@ -47,21 +42,18 @@ interface GetFolderOptions {
   filterExtensions?: string[];
   filterPattern?: RegExp;
   includeDotFiles?: boolean;
-  // Nuevas opciones
-  minSize?: number; // Tamaño mínimo en bytes
-  maxSize?: number; // Tamaño máximo en bytes
-  modifiedAfter?: Date; // Archivos modificados después de esta fecha
-  modifiedBefore?: Date; // Archivos modificados antes de esta fecha
-  followSymlinks?: boolean; // Seguir enlaces simbólicos
-  includeMimeType?: boolean; // Incluir tipo MIME estimado
-  onProgress?: (processed: number, total: number, current: string) => void; // Callback de progreso
+  minSize?: number; 
+  maxSize?: number; 
+  modifiedAfter?: Date; 
+  modifiedBefore?: Date; 
+  followSymlinks?: boolean; 
+  includeMimeType?: boolean; 
+  onProgress?: (processed: number, total: number, current: string) => void;
 }
 
-// Cache para mejorar rendimiento en operaciones repetitivas
 const statsCache = new Map<string, { stats: FileStats; timestamp: number }>();
 const CACHE_DURATION = 30000; // 30 segundos
 
-// Función mejorada para formatear el tamaño
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return "0 B";
   if (bytes < 0) return "N/A";
@@ -71,12 +63,10 @@ const formatFileSize = (bytes: number): string => {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   const size = bytes / Math.pow(k, i);
 
-  // Mostrar más decimales para tamaños pequeños
   const decimals = i === 0 ? 0 : i === 1 ? 1 : 2;
   return `${size.toFixed(decimals)} ${sizes[i]}`;
 };
 
-// Función mejorada para permisos con información adicional
 const getPermissions = (mode: number): string => {
   const permissions = [];
 
@@ -98,7 +88,6 @@ const getPermissions = (mode: number): string => {
   return permissions.join("");
 };
 
-// Nueva función para obtener tipo MIME básico basado en extensión
 const getMimeType = (extension: string): string | undefined => {
   const mimeTypes: Record<string, string> = {
     ".txt": "text/plain",
@@ -131,7 +120,6 @@ const getMimeType = (extension: string): string | undefined => {
   return mimeTypes[extension.toLowerCase()];
 };
 
-// NUEVA FUNCIÓN: Obtener stats de un solo archivo o directorio
 const getItemStats = async (
   itemPath: string,
   options: {
@@ -147,7 +135,7 @@ const getItemStats = async (
   } = options;
 
   try {
-    // Verificar cache
+
     if (useCache && statsCache.has(itemPath)) {
       const cached = statsCache.get(itemPath)!;
       if (Date.now() - cached.timestamp < CACHE_DURATION) {
@@ -208,7 +196,6 @@ const getItemStats = async (
   }
 };
 
-// Función principal mejorada
 const getFolderDetails = async (
   basePath: string,
   folderName: string = "",
@@ -316,7 +303,6 @@ const getFolderDetails = async (
               return null;
             }
 
-            // Callback de progreso
             if (onProgress) {
               processedCount++;
               onProgress(processedCount, entries.length, entryPath);
@@ -335,7 +321,6 @@ const getFolderDetails = async (
     );
     allDetails.push(...validDetails);
 
-    // Procesamiento recursivo mejorado con manejo de errores
     if (recursive && currentDepth < maxDepth) {
       const subdirectories = validDetails.filter(
         (detail) => detail.isDirectory,
@@ -359,9 +344,7 @@ const getFolderDetails = async (
       });
     }
 
-    // Ordenamiento mejorado
     allDetails.sort((a, b) => {
-      // Priorizar directorios si se especifica
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
 
@@ -401,7 +384,6 @@ const getFolderDetails = async (
   }
 };
 
-// Funciones de conveniencia mejoradas
 const getDirectoriesOnly = async (
   basePath: string,
   folderName: string = "",
@@ -426,16 +408,12 @@ const getFilesOnly = async (
   });
 };
 
-// Función mejorada y renombrada para mayor claridad
 const getFolderStats = async (
   folderPath: string,
 ): Promise<FileStats | null> => {
   return getItemStats(folderPath);
 };
 
-// NUEVAS FUNCIONES ÚTILES
-
-// Obtener archivos por tipo MIME
 const getFilesByMimeType = async (
   basePath: string,
   mimeTypes: string[],
@@ -452,21 +430,19 @@ const getFilesByMimeType = async (
   );
 };
 
-// Obtener resumen de directorio - simplificado y optimizado
 const getDirectorySummary = async (
   basePath: string,
   options: GetFolderOptions & {
     includeFileTypes?: boolean;
-    processSubdirectories?: boolean; // NUEVO: controla si procesa recursivamente
+    processSubdirectories?: boolean;
   } = {},
 ) => {
   const {
     includeFileTypes = false,
-    processSubdirectories = false, // Por defecto NO procesa subdirectorios
+    processSubdirectories = false,
     ...folderOptions
   } = options;
 
-  // Solo procesar recursivamente si se solicita explícitamente
   const items = await getFolderDetails(basePath, "", {
     ...folderOptions,
     recursive: processSubdirectories,
@@ -487,7 +463,6 @@ const getDirectorySummary = async (
     fileTypes: includeFileTypes ? {} : undefined,
   };
 
-  // Solo calcular tipos de archivo si se solicita explícitamente
   if (includeFileTypes) {
     const fileTypes: Record<string, number> = {};
     files.forEach((file) => {
@@ -500,7 +475,6 @@ const getDirectorySummary = async (
   return result;
 };
 
-// NUEVA FUNCIÓN: Stats súper rápidos solo del directorio actual (no recursivo)
 const getQuickDirectoryStats = async (
   basePath: string,
 ): Promise<{
@@ -516,7 +490,6 @@ const getQuickDirectoryStats = async (
     let directoriesCount = 0;
     let totalSize = 0;
 
-    // Procesar entradas de forma síncrona para máxima velocidad
     const sizePromises = entries.map(async (entry) => {
       if (entry.isDirectory()) {
         directoriesCount++;
@@ -557,78 +530,17 @@ const clearStatsCache = (): void => {
   statsCache.clear();
 };
 
-// Ejemplo de uso mejorado
-async function example() {
-  const testPATH = "C:/Users/mm/Documents/GitHub/buntralino/overlay_apirest";
-
-  try {
-    // Obtener stats de un archivo específico
-    const fileStats = await getItemStats(path.join(testPATH, "package.json"));
-    console.log("Stats de package.json:", fileStats);
-
-    // Obtener stats de un directorio
-    const dirStats = await getItemStats(testPATH);
-    console.log("Stats del directorio:", dirStats);
-
-    // Obtener solo directorios
-    const directories = await getDirectoriesOnly(testPATH);
-
-    // Obtener archivos con progreso
-    const files = await getFilesOnly(testPATH, "", {
-      onProgress: (processed, total, current) => {
-        console.log(`Procesando: ${processed}/${total} - ${current}`);
-      },
-    });
-
-    // Buscar archivos JavaScript/TypeScript con filtros avanzados
-    const jsFiles = await getFolderDetails(testPATH, "", {
-      includeDirectories: false,
-      filterExtensions: [".js", ".ts", ".jsx", ".tsx"],
-      modifiedAfter: new Date("2024-01-01"),
-      minSize: 100, // mínimo 100 bytes
-      sortBy: "size",
-      sortOrder: "desc",
-      includeMimeType: true,
-    });
-
-    // Obtener archivos de imagen
-    const imageFiles = await getFilesByMimeType(
-      testPATH,
-      ["image/jpeg", "image/png", "image/gif", "image/svg+xml"],
-      { recursive: true },
-    );
-
-    // STATS SÚPER RÁPIDOS - Solo directorio actual (recomendado para UI)
-    const quickStats = await getQuickDirectoryStats(testPATH);
-    console.log("Stats instantáneos:", quickStats);
-
-    // Resumen rápido del directorio actual (sin tipos de archivo, sin subdirectorios)
-    const currentLevelSummary = await getDirectorySummary(testPATH);
-    console.log("Resumen nivel actual:", currentLevelSummary);
-
-    // Resumen completo recursivo (más lento - solo usar cuando sea necesario)
-    const recursiveSummary = await getDirectorySummary(testPATH, {
-      processSubdirectories: false,
-      maxDepth: 3,
-      includeFileTypes: false,
-    });
-    console.log("Resumen recursivo:", recursiveSummary);
-  } catch (error) {
-    console.error("Error en ejemplo:", error);
-  }
-}
-//example().catch(console.error);
 export {
   getFolderDetails,
   getDirectoriesOnly,
   getFilesOnly,
-  getFolderStats, // Mantener compatibilidad
-  getItemStats, // Nueva función principal
+  getFolderStats,
+  getItemStats,
   getFilesByMimeType,
   getDirectorySummary,
-  getQuickDirectoryStats, // NUEVA función súper rápida
+  getQuickDirectoryStats,
   clearStatsCache,
-  formatFileSize, // Exportar para uso externo
+  formatFileSize,
   type FileDetails,
   type FileStats,
   type GetFolderOptions,

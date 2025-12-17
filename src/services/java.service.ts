@@ -32,55 +32,13 @@ export interface JavaVersionsInfo {
   installed: number[];
 }
 
-const ADOPTIUM_ARCH_MAP: Record<string, string | undefined> = {
-  x32: "x32",
-  x64: "x64",
-  x86_64: "x64",
-  arm64: "aarch64",
-};
-/** Converts Node's process.platform/arch into Adoptium names. */
-function adoptiumNames() {
-  const platformMap: Record<string, string> = {
-    win32: "windows",
-    linux: "linux",
-    darwin: "mac",
-    android: "linux", // Termux still uses linux tar.gz
-  };
+import {
+  ADOPTIUM_API_BASE_URL,
+  ADOPTIUM_ARCH_MAP,
+  TERMUX_CONSTANTS,
+  FOLDER_NAMES,
+} from "../constants.js";
 
-  const osName = platformMap[process.platform];
-  const archName = ADOPTIUM_ARCH_MAP[process.arch];
-  if (!osName || !archName) {
-    throw new Error(
-      `Unsupported platform/arch: ${process.platform}/${process.arch}`,
-    );
-  }
-  return { os: osName, arch: archName };
-}
-/*
-
-export interface JavaInfoTermux {
-  isTermux: true;
-  version: string;
-  packageName: string;
-  installCmd: string;
-  javaPath: string;
-  installed: boolean;
-}
-
-
-export interface JavaInfoStandard {
-  isTermux: false;
-  url: string;
-  filename: string;
-  version: string;
-  downloadPath: string; // Ruta relativa para el archivo descargado
-  unpackPath: string; // Ruta relativa para la carpeta descomprimida
-  absoluteDownloadPath: string;
-  absoluteUnpackPath: string;
-  javaBinPath: string; // Ruta absoluta a la carpeta 'bin' de Java
-}
-
-*/
 const _getJavaInfoByVersion = async (
   javaVersion: string | number,
 ) => {
@@ -91,7 +49,7 @@ const _getJavaInfoByVersion = async (
 
   // --- Caso Especial: Termux ---
   if (env.isTermux()) {
-    const packageName = `openjdk-${versionStr}`;
+    const packageName = `${TERMUX_CONSTANTS.PACKAGE_PREFIX}${versionStr}`;
     const packageCheckResult =
       await CommandUtils.isPackageInstalled(packageName);
     const isInstalled = packageCheckResult.success
@@ -102,21 +60,21 @@ const _getJavaInfoByVersion = async (
       isTermux: true,
       version: versionStr,
       packageName,
-      installCmd: `pkg install ${packageName}`,
-      javaPath: "/data/data/com.termux/files/usr/bin/",
+      installCmd: `${TERMUX_CONSTANTS.INSTALL_CMD_PREFIX}${packageName}`,
+      javaPath: TERMUX_CONSTANTS.JAVA_PATH,
       installed: isInstalled,
     };
   }
 
   // --- Caso Estándar: Windows, Linux, macOS ---
-  const arch = ADOPTIUM_ARCH_MAP[env.arch];
+  const arch = ADOPTIUM_ARCH_MAP[process.arch];
   if (!arch) {
     throw new Error(
-      `Arquitectura no soportada para la API de Adoptium: ${env.arch}`,
+      `Arch Unsupported: ADOPTIUM_ARCH_MAP[${process.arch}] ${arch}`,
     );
   }
 
-  const resultURL = `https://api.adoptium.net/v3/binary/latest/${versionStr}/ga/${env.platform.name}/${arch}/jdk/hotspot/normal/eclipse?project=jdk`;
+  const resultURL = `${ADOPTIUM_API_BASE_URL}/binary/latest/${versionStr}/ga/${env.platform.name}/${arch}/jdk/hotspot/normal/eclipse?project=jdk`;
   const filename = `Java-${versionStr}-${arch}${env.platform.ext}`;
 
   const relativeDownloadPath = path.join(defaultPaths.downloadPath, filename);
@@ -125,7 +83,7 @@ const _getJavaInfoByVersion = async (
   const absoluteUnpackPath = path.resolve(relativeUnpackPath);
 
   // --- Lógica mejorada para encontrar el 'bin' usando FileUtils ---
-  let javaBinPath = path.join(absoluteUnpackPath, "bin");
+  let javaBinPath = path.join(absoluteUnpackPath, FOLDER_NAMES.BIN);
 
   return {
     isTermux: false,
@@ -140,11 +98,18 @@ const _getJavaInfoByVersion = async (
   };
 };
 async function _getJavaInstallableVersions(): Promise<JavaVersionsInfo> {
-  const { os, arch } = adoptiumNames();
+  const os = env.platform.name;
+  const arch = ADOPTIUM_ARCH_MAP[process.arch];
+
+  if (!arch) {
+    throw new Error(
+        `Arch Unsupported: ADOPTIUM_ARCH_MAP[${process.arch}] ${arch}`,
+    );
+  }
 
   // 3.1 – which feature releases exist?
   const availRes = await fetch(
-    "https://api.adoptium.net/v3/info/available_releases",
+    `${ADOPTIUM_API_BASE_URL}/info/available_releases`,
   );
   if (!availRes.ok) throw new Error(`Adoptium API error: ${availRes.status}`);
   const { available_releases, most_recent_lts } = (await availRes.json()) as {
@@ -157,7 +122,7 @@ async function _getJavaInstallableVersions(): Promise<JavaVersionsInfo> {
   for (const feature of available_releases) {
     // Only consider GA releases (not ea)
     const url =
-      `https://api.adoptium.net/v3/assets/latest/${feature}/hotspot?` +
+      `${ADOPTIUM_API_BASE_URL}/assets/latest/${feature}/hotspot?` +
       `os=${os}&architecture=${arch}&image_type=jdk&project=jdk`;
     const res = await fetch(url);
     if (!res.ok) continue; // version might not exist for this platform

@@ -1,268 +1,306 @@
-import { exec, execSync } from "node:child_process";
+import { exec, execSync, type ExecOptions ,type ExecSyncOptions} from "node:child_process";
 import { promisify } from "node:util";
-import { isWindows, isLinux } from "../platforms/env.js"; // Importamos los detectores de SO
+import { isWindows, isLinux } from "../platforms/env.js";
 import { asyncHandler } from "./file.js";
+
+const execPromise = promisify(exec);
+
 /**
- * Ejecuta un comando de forma síncrona y devuelve su salida.
- * Lanza un error si el comando falla (exit code no es 0).
- * @param command El comando a ejecutar.
- * @returns El resultado (stdout) del comando como string.
+ * Interface for command execution options
  */
-const execAsync = promisify(exec);
-function runSync(command: string): string {
-  // Usamos { stdio: 'pipe' } para capturar la salida y 'ignore' para el error,
-  // y 'inherit' para la entrada. Esto evita que los errores se impriman en la consola.
-  // El error se captura con el bloque try/catch.
-  return execSync(command, {
-    encoding: "utf8",
-    stdio: ["inherit", "pipe", "ignore"],
-  });
+export interface CommandOptions extends ExecOptions {
+  /** If true, suppresses standard error output */
+  silent?: boolean;
 }
-const _runCommand = async (command: string): Promise<string> => {
-  const { stdout } = await execAsync(command);
-  return stdout.trim();
-};
+
 /**
- * Comprueba si un comando está disponible en el PATH del sistema.
- * @param commandName El nombre del comando a verificar (ej. "git", "java").
- * @returns `true` si el comando existe, `false` en caso contrario.
+ * Result of a command execution
  */
-export function isCommandAvailable(commandName: string): boolean {
+export interface CommandResult {
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * Executes a command asynchronously.
+ * @param command The command to execute.
+ * @param options Execution options.
+ * @returns The stdout of the command.
+ * @throws Error if the command fails.
+ */
+async function _runCommand(
+  command: string,
+  options: CommandOptions = {},
+) {
+  const { silent, ...execOps } = options;
   try {
-    // 'where' en Windows y 'which' en Linux/macOS son los comandos nativos
-    // para localizar un ejecutable en el PATH. Son más fiables que solo intentar ejecutarlo.
-    const checkCommand = isWindows() ? "where" : "which";
-    runSync(`${checkCommand} ${commandName}`);
+    const { stdout } = await execPromise(command, {
+      encoding: "utf8",
+      maxBuffer: 10 * 1024 * 1024, // 10MB
+      ...execOps,
+    });
+    if (typeof stdout === "string") {
+      return stdout.trim();
+    }
+    return stdout;
+  } catch (error: any) {
+    if (!silent) {
+       // Only log if specifically needed, but usually we just throw
+    }
+    throw new Error(`Command failed: ${command}\n${error.message || error}`);
+  }
+  
+}
+
+/**
+ * Executes a command asynchronously and returns both stdout and stderr.
+ * @param command The command to execute.
+ * @param options Execution options.
+ * @returns Object containing stdout and stderr.
+ * @throws Error if the command fails.
+ */
+async function _runCommandFull(
+  command: string,
+  options: CommandOptions = {},
+): Promise<CommandResult> {
+  const { silent, ...execOps } = options;
+  try {
+    const { stdout, stderr } = await execPromise(command, {
+      encoding: "utf8",
+      maxBuffer: 10 * 1024 * 1024, // 10MB
+      ...execOps,
+    });
+    return {
+      stdout: (typeof stdout === "string" ? stdout : String(stdout)).trim(),
+      stderr: (typeof stderr === "string" ? stderr : String(stderr)).trim(),
+    };
+  } catch (error: any) {
+    if (!silent) {
+       // Only log if specifically needed
+    }
+    // If we want to return the output even on failure, we'd need to change the return type signature or catch strategy.
+    // For now, consistent with _runCommand, we throw.
+    throw new Error(`Command failed: ${command}\n${error.message || error}`);
+  }
+}
+
+/**
+ * Executes a command synchronously.
+ * @param command The command to execute.
+ * @param options Execution options.
+ * @returns The stdout of the command.
+ */
+export function runSync(command: string, options: CommandOptions = {}): string {
+  try {
+    const { silent, encoding, ...execOps } = options;
+
+    const execOptions: ExecSyncOptions = {
+      // FIX: Cast the generic string to BufferEncoding to satisfy TypeScript
+      encoding: (encoding as BufferEncoding) || "utf8",
+      stdio: silent ? ["ignore", "pipe", "ignore"] : ["ignore", "pipe", "pipe"],
+      maxBuffer: 10 * 1024 * 1024, // 10MB
+      ...execOps,
+    };
+    
+    // We cast the result to string because we forced a text encoding above
+    return (execSync(command, execOptions) as string).trim();
+  } catch (error: any) {
+    throw new Error(`Command failed: ${command}\n${error.message || error}`);
+  }
+}
+
+/**
+ * Checks if a command exists in the system PATH.
+ * @param commandName The name of the command to check.
+ * @returns True if the command exists, false otherwise.
+ */
+async function _isCommandAvailable(commandName: string): Promise<boolean> {
+  const checkCmd = isWindows() ? "where" : "which";
+  try {
+    await _runCommand(`${checkCmd} ${commandName}`, { silent: true });
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
-const _isCommandAvailable = async (command: string): Promise<boolean> => {
-  const checkCmd = isWindows() ? "where" : "which";
-  await _runCommand(`${checkCmd} ${command}`);
-  // Si _runCommand no lanza error, el comando existe.
-  return true;
-};
 
-const _getPackageManager = async (): Promise<string> => {
-  const managers = [
-    "apt",
-    "pkg",
-    "dnf",
-    "yum",
-    "pacman",
-    "brew",
-    "winget",
-    "choco",
-  ];
-  for (const manager of managers) {
-    // Usamos la versión sin envolver para un control más fino del flujo
-    try {
-      await _isCommandAvailable(manager);
-      return manager;
-    } catch {
-      // Ignoramos el error y continuamos con el siguiente
-      continue;
-    }
-  }
-  throw new Error("No se pudo detectar un gestor de paquetes compatible.");
-};
 /**
- * Detecta el gestor de paquetes por defecto disponible en el sistema.
- * @returns El nombre del gestor de paquetes (ej. "apt", "brew", "winget") o null si no se encuentra uno compatible.
+ * Synchronous version of checking if a command exists.
+ * @param commandName The name of the command to check.
+ * @returns True if the command exists, false otherwise.
  */
-export function getPackageManager(): string | null {
-  // Lista de gestores de paquetes en orden de preferencia o commonality
-  const managers = [
-    // Linux
-    "apt", // Debian, Ubuntu
-    "dnf", // Fedora, CentOS
-    "yum", // CentOS (legacy)
-    "pacman", // Arch Linux
-    // macOS
-    "brew", // Homebrew
-    // Windows
-    "winget", // Windows Package Manager
-    "choco", // Chocolatey
-    // Android (Termux)
-    "pkg",
-  ];
+export function isCommandAvailable(commandName: string): boolean {
+  const checkCmd = isWindows() ? "where" : "which";
+  try {
+    runSync(`${checkCmd} ${commandName}`, { silent: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-  for (const manager of managers) {
-    if (isCommandAvailable(manager)) {
-      return manager;
+/**
+ * Supported package managers
+ */
+export type PackageManager = "apt" | "dnf" | "yum" | "pacman" | "brew" | "winget" | "choco" | "pkg";
+
+const PACKAGE_MANAGERS: PackageManager[] = [
+  "apt", "dnf", "yum", "pacman", // Linux
+  "brew", // macOS
+  "winget", "choco", // Windows
+  "pkg" // Android/Termux
+];
+
+/**
+ * Detects the available package manager on the system.
+ * @returns The name of the package manager or null if none found.
+ */
+async function _getPackageManager(): Promise<PackageManager | null> {
+  // Check in parallel for faster detection? 
+  // Sequential is safer to avoid spawning too many processes if checking many.
+  for (const pm of PACKAGE_MANAGERS) {
+    if (await _isCommandAvailable(pm)) {
+      return pm;
     }
   }
-
   return null;
 }
 
 /**
- * Interfaz para la información de la distribución de Linux.
+ * Synchronously detects the available package manager.
+ * @returns The name of the package manager or null if none found.
  */
-export interface LinuxDistroInfo {
-  id: string; // ej. "ubuntu", "fedora", "arch"
-  versionId: string; // ej. "22.04"
+export function getPackageManager(): PackageManager | null {
+  for (const pm of PACKAGE_MANAGERS) {
+    if (isCommandAvailable(pm)) {
+      return pm;
+    }
+  }
+  return null;
 }
 
 /**
- * Obtiene información de la distribución de Linux parseando /etc/os-release.
- * @returns Un objeto con el ID y la versión de la distro, o null si no se puede determinar.
+ * Checks if a specific package is installed using the system's package manager.
+ * @param packageName The name of the package to check.
+ * @param pm Optional specific package manager to use.
+ * @returns True if installed, false otherwise.
+ */
+async function _isPackageInstalled(packageName: string, pm?: PackageManager): Promise<boolean> {
+  const manager = pm || (await _getPackageManager());
+  if (!manager) return false;
+
+  const check: Record<PackageManager, string> = {
+    apt: `dpkg -s ${packageName}`,
+    dnf: `rpm -q ${packageName}`,
+    yum: `rpm -q ${packageName}`,
+    pacman: `pacman -Q ${packageName}`,
+    brew: `brew list --versions ${packageName}`,
+    winget: `winget list --name "${packageName}"`,
+    choco: `choco list --local-only --exact ${packageName}`,
+    pkg: `pkg list-installed ${packageName}`,
+  };
+
+  const command = check[manager];
+  if (!command) {
+    console.warn(`Package check not implemented for: ${manager}`);
+    return false;
+  }
+
+  try {
+    const output = await _runCommand(command, { silent: true });
+    if (manager === "winget" || manager === "pkg") {
+      return output.includes(packageName);
+    }
+    if (manager === "choco") {
+      return output.includes("1 packages installed.");
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Synchronously checks if a specific package is installed.
+ * @param packageName The name of the package to check.
+ * @param pm Optional specific package manager to use.
+ * @returns True if installed, false otherwise.
+ */
+export function isPackageInstalled(packageName: string, pm?: PackageManager): boolean {
+  const manager = pm || getPackageManager();
+  if (!manager) return false;
+
+  const check: Record<PackageManager, string> = {
+    apt: `dpkg -s ${packageName}`,
+    dnf: `rpm -q ${packageName}`,
+    yum: `rpm -q ${packageName}`,
+    pacman: `pacman -Q ${packageName}`,
+    brew: `brew list --versions ${packageName}`,
+    winget: `winget list --name "${packageName}"`,
+    choco: `choco list --local-only --exact ${packageName}`,
+    pkg: `pkg list-installed ${packageName}`,
+  };
+
+  const command = check[manager];
+  if (!command) return false;
+
+  try {
+    const output = runSync(command, { silent: true });
+    if (manager === "winget" || manager === "pkg") {
+      return output.includes(packageName);
+    }
+    if (manager === "choco") {
+      return output.includes("1 packages installed.");
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface LinuxDistroInfo {
+  id: string;
+  versionId: string;
+}
+
+/**
+ * Retrieves Linux distribution information from /etc/os-release.
+ * @returns Distro info or null if not found/not Linux.
  */
 export function getLinuxDistroInfo(): LinuxDistroInfo | null {
-  if (!isLinux()) {
-    return null;
-  }
+  if (!isLinux()) return null;
   try {
-    // /etc/os-release es el estándar moderno para obtener esta información
-    const output = runSync("cat /etc/os-release");
-    const lines = output.split("\n");
+    const output = runSync("cat /etc/os-release", { silent: true });
+    const lines = typeof output === "string" ? output.split("\n") : [];
     const info: Partial<LinuxDistroInfo> = {};
-
-    lines.forEach((line) => {
+    
+    for (const line of lines) {
       if (line.startsWith("ID=")) {
-        info.id = line.replace("ID=", "").replace(/"/g, "").trim();
+        info.id = line.substring(3).replace(/"/g, "").trim();
       } else if (line.startsWith("VERSION_ID=")) {
-        info.versionId = line
-          .replace("VERSION_ID=", "")
-          .replace(/"/g, "")
-          .trim();
+        info.versionId = line.substring(11).replace(/"/g, "").trim();
       }
-    });
-
+    }
+    
     if (info.id && info.versionId) {
       return info as LinuxDistroInfo;
     }
     return null;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
 
 /**
- * Comprueba si un paquete está instalado utilizando el gestor de paquetes del sistema.
- * @param packageName El nombre del paquete a verificar. ¡OJO! Este nombre puede variar entre distros.
- * @param pm Opcional. El gestor de paquetes a usar. Si no se provee, se auto-detecta.
- * @returns `true` si el paquete está instalado, `false` en caso contrario.
- */
-export function isPackageInstalled(packageName: string, pm?: string): boolean {
-  try {
-    const packageManager = pm || getPackageManager();
-
-    if (!packageManager) {
-      // Si no hay gestor de paquetes, no podemos comprobar.
-      return false;
-    }
-    switch (packageManager) {
-      case "apt":
-        // `dpkg -s` devuelve un estado detallado. Si no está instalado, da un exit code != 0.
-        runSync(`dpkg -s ${packageName}`);
-        return true;
-
-      case "pkg": // Termux
-        // `pkg list-installed` es silencioso y efectivo.
-        return runSync(`pkg list-installed ${packageName}`).includes(
-          packageName,
-        );
-
-      case "dnf":
-      case "yum":
-        // `rpm -q` es el comando subyacente para consultar la base de datos de paquetes.
-        runSync(`rpm -q ${packageName}`);
-        return true;
-
-      case "pacman":
-        // `pacman -Q` consulta la base de datos local.
-        runSync(`pacman -Q ${packageName}`);
-        return true;
-
-      case "brew":
-        // `brew list --versions` devuelve la versión si está instalado, o nada si no lo está.
-        // Si no está instalado, el comando falla.
-        runSync(`brew list --versions ${packageName}`);
-        return true;
-
-      case "winget":
-        // `winget list` filtra por nombre. Si no encuentra nada, la salida es vacía.
-        return runSync(`winget list --name "${packageName}"`).includes(
-          packageName,
-        );
-
-      case "choco":
-        // `choco list --local-only` busca solo paquetes instalados.
-        return runSync(
-          `choco list --local-only --exact ${packageName}`,
-        ).includes("1 packages installed.");
-
-      default:
-        console.warn(
-          `Comprobación de paquete no implementada para el gestor: ${packageManager}`,
-        );
-        return false;
-    }
-  } catch (error) {
-    // Si cualquiera de los comandos falla, significa que el paquete no está instalado.
-    return false;
-  }
-}
-const _isPackageInstalled = async (packageName: string): Promise<boolean> => {
-  const pmResult = await getPackageManager(); // Usamos la versión envuelta
-  if (!pmResult) {
-    return false; // Si no hay gestor, no podemos comprobar
-  }
-  const pm = pmResult as string; // Aseguramos que es un string
-
-  let command: string;
-  switch (pm) {
-    case "apt":
-      command = `dpkg -s ${packageName}`;
-      break;
-    case "pkg":
-      command = `pkg list-installed ${packageName}`;
-      break;
-    case "dnf":
-    case "yum":
-      command = `rpm -q ${packageName}`;
-      break;
-    case "pacman":
-      command = `pacman -Q ${packageName}`;
-      break;
-    case "brew":
-      command = `brew list --versions ${packageName}`;
-      break;
-    case "winget":
-      command = `winget list --name "${packageName}"`;
-      break;
-    case "choco":
-      command = `choco list --local-only --exact ${packageName}`;
-      break;
-    default:
-      throw new Error(`Comprobación no implementada para el gestor: ${pm}`);
-  }
-
-  const output = await _runCommand(command);
-
-  // Algunas comprobaciones necesitan verificar la salida además del código de éxito
-  if (pm === "winget" || pm === "pkg") {
-    return output.includes(packageName);
-  }
-  if (pm === "choco") {
-    return output.includes("1 packages installed.");
-  }
-  return true; // Para los demás, el éxito del comando es suficiente
-};
-
-/**
- * Conjunto de utilidades para ejecutar comandos del sistema de forma asíncrona.
+ * Utilities for executing system commands.
  */
 export const CommandUtils = {
-  /** Ejecuta un comando y devuelve su salida. */
   run: asyncHandler(_runCommand),
-  /** Verifica si un comando está disponible en el PATH. */
   isCommandAvailable: asyncHandler(_isCommandAvailable),
-  /** Detecta el gestor de paquetes por defecto del sistema. */
   getPackageManager: asyncHandler(_getPackageManager),
-  /** Verifica si un paquete está instalado a través del gestor del sistema. */
   isPackageInstalled: asyncHandler(_isPackageInstalled),
+  /**
+   * runs a command and returns both stdout and stderr
+   */
+  execute: asyncHandler(_runCommandFull),
 };

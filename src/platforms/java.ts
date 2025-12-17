@@ -3,6 +3,13 @@ import { existsSync, readdirSync } from "fs";
 import { env } from "./env.js"; // Importamos el objeto env que contiene todo
 import { isPackageInstalled } from "../utils/commands.js";
 import { defaultPaths } from "../config.js";
+import {
+  ADOPTIUM_ARCH_MAP,
+  ADOPTIUM_API_BASE_URL,
+  TERMUX_CONSTANTS,
+  FOLDER_NAMES,
+} from "../constants.js";
+
 // ─────────────────────────────────────────────────────────────
 // Interfaces de Salida
 // ─────────────────────────────────────────────────────────────
@@ -37,15 +44,6 @@ export interface JavaInfoStandard {
 // El tipo de retorno combinado
 export type JavaInfo = JavaInfoTermux | JavaInfoStandard;
 
-/**
- * Mapa de arquitecturas específico para la API de Adoptium (Temurin).
- * `process.arch` -> `API value`
- */
-const ADOPTIUM_ARCH_MAP: Record<string, string | undefined> = {
-  x64: "x64",
-  arm64: "aarch64",
-};
-
 // ─────────────────────────────────────────────────────────────
 // Función Principal
 // ─────────────────────────────────────────────────────────────
@@ -64,13 +62,13 @@ export const getJavaInfoByVersion = (
 
   // --- Caso Especial: Termux ---
   if (env.isTermux()) {
-    const packageName = `openjdk-${versionStr}`;
+    const packageName = `${TERMUX_CONSTANTS.PACKAGE_PREFIX}${versionStr}`;
     return {
       isTermux: true,
       version: versionStr,
       packageName,
-      installCmd: `pkg install ${packageName}`,
-      javaPath: "/data/data/com.termux/files/usr/bin/",
+      installCmd: `${TERMUX_CONSTANTS.INSTALL_CMD_PREFIX}${packageName}`,
+      javaPath: TERMUX_CONSTANTS.JAVA_PATH,
       installed: isPackageInstalled(packageName, "pkg"),
     };
   }
@@ -93,7 +91,7 @@ export const getJavaInfoByVersion = (
   }
 
   // Construir la información para la descarga
-  const resultURL = `https://api.adoptium.net/v3/binary/latest/${versionStr}/ga/${platform.name}/${arch}/jdk/hotspot/normal/eclipse?project=jdk`;
+  const resultURL = `${ADOPTIUM_API_BASE_URL}/binary/latest/${versionStr}/ga/${platform.name}/${arch}/jdk/hotspot/normal/eclipse?project=jdk`;
   const filename = `Java-${versionStr}-${arch}${platform.ext}`;
 
   const relativeDownloadPath = path.join(defaultPaths.backupPath, filename);
@@ -104,7 +102,7 @@ export const getJavaInfoByVersion = (
 
   // Lógica para encontrar la carpeta 'bin' dentro del JDK descomprimido
   // (a menudo viene dentro de otra carpeta como 'jdk-17.0.2+8')
-  let javaBinPath = path.join(absoluteUnpackPath, "bin");
+  let javaBinPath = path.join(absoluteUnpackPath, FOLDER_NAMES.BIN);
   if (!existsSync(javaBinPath) && existsSync(absoluteUnpackPath)) {
     try {
       const files = readdirSync(absoluteUnpackPath);
@@ -112,22 +110,22 @@ export const getJavaInfoByVersion = (
       const macOsHomePath = path.join(
         absoluteUnpackPath,
         files[0]!,
-        "Contents",
-        "Home",
+        FOLDER_NAMES.CONTENTS,
+        FOLDER_NAMES.HOME,
       );
       if (env.isMacOS() && existsSync(macOsHomePath)) {
-        javaBinPath = path.join(macOsHomePath, "bin");
+        javaBinPath = path.join(macOsHomePath, FOLDER_NAMES.BIN);
       } else {
         // Para Linux/Windows, buscar una carpeta que empiece con 'jdk-'
-        const jdkFolder = files.find((file) => file.startsWith("jdk-"));
+        const jdkFolder = files.find((file) => file.startsWith(FOLDER_NAMES.JDK_PREFIX));
         if (jdkFolder) {
-          javaBinPath = path.join(absoluteUnpackPath, jdkFolder, "bin");
+          javaBinPath = path.join(absoluteUnpackPath, jdkFolder, FOLDER_NAMES.BIN);
         }
       }
     } catch (e) {
       // Ignorar si no se puede leer el directorio, javaBinPath mantendrá su valor por defecto
       console.warn(
-        `Could not dynamically find 'bin' path in ${absoluteUnpackPath}.`,
+        `Could not dynamically find '${FOLDER_NAMES.BIN}' path in ${absoluteUnpackPath}.`,
       );
     }
   }

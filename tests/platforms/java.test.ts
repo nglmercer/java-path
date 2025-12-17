@@ -23,7 +23,7 @@ describe("Java platform utilities", () => {
   it("should return JavaInfoTermux when on Termux", () => {
     // Mock Termux detection
     const originalIsTermux = env.isTermux;
-    (env as any).isTermux = () => true;
+    env.isTermux = () => true;
 
     const result = getJavaInfoByVersion("17");
     expect(result).not.toBeNull();
@@ -38,13 +38,13 @@ describe("Java platform utilities", () => {
     }
 
     // Restore original function
-    (env as any).isTermux = originalIsTermux;
+    env.isTermux = originalIsTermux;
   });
 
   it("should return JavaInfoStandard on non-Termux platforms", () => {
     // Mock non-Termux detection
     const originalIsTermux = env.isTermux;
-    (env as any).isTermux = () => false;
+    env.isTermux = () => false;
 
     const result = getJavaInfoByVersion("11");
     expect(result).not.toBeNull();
@@ -61,7 +61,7 @@ describe("Java platform utilities", () => {
     }
 
     // Restore original function
-    (env as any).isTermux = originalIsTermux;
+    env.isTermux = originalIsTermux;
   });
 
   it("should handle different Java versions correctly", () => {
@@ -79,19 +79,21 @@ describe("Java platform utilities", () => {
   it("should return null for unsupported architectures", () => {
     // Mock unsupported architecture
     const originalArch = process.arch;
-    (process as any).arch = "unsupported_arch";
+    //@ts-expect-error
+    process.arch = "unsupported_arch";
 
     const result = getJavaInfoByVersion("17");
     expect(result).toBeNull();
 
     // Restore original architecture
-    (process as any).arch = originalArch;
+    //@ts-expect-error
+    process.arch = originalArch;
   });
 
   it("should construct correct URLs for Adoptium API", () => {
     // Mock non-Termux detection
     const originalIsTermux = env.isTermux;
-    (env as any).isTermux = () => false;
+    env.isTermux = () => false;
 
     const result = getJavaInfoByVersion("17");
     expect(result).not.toBeNull();
@@ -103,6 +105,6 @@ describe("Java platform utilities", () => {
     }
 
     // Restore original function
-    (env as any).isTermux = originalIsTermux;
+    env.isTermux = originalIsTermux;
   });
 });
