@@ -7,6 +7,7 @@ A comprehensive TypeScript library for detecting, managing, and working with Jav
 - **Platform Detection**: Detect the current operating system and architecture
 - **Java Version Management**: Locate and manage multiple Java installations
 - **Termux Support**: Special handling for Java in Termux environments
+- **File Integrity Verification**: Automatic checksum and size verification for downloaded files
 - **Utility Functions**: File operations, command execution, and validation helpers
 
 ## Installation
@@ -32,13 +33,14 @@ This will create a bundled version in the `dist` directory optimized for Node.js
 ### Basic Usage
 
 ```typescript
-import { 
-  env, 
-  getJavaInfo, 
-  findJavaVersion, 
-  FileUtils, 
-  taskManager, 
-  defaultPaths 
+import {
+  env,
+  getJavaInfo,
+  findJavaVersion,
+  FileUtils,
+  taskManager,
+  defaultPaths,
+  CommandUtils,
 } from "java-path";
 
 // Get environment information
@@ -58,15 +60,19 @@ const exists = await FileUtils.pathExists(filePath);
 // Use task manager for Java operations
 const { taskId, promise } = taskManager.createBackup(sourceDir, {
   outputFilename: "backup.zip",
-  useZip: true
+  useZip: true,
 });
 
 // Configure default paths
 defaultPaths.update({
   downloadPath: "/custom/downloads",
   unpackPath: "/custom/unpacked",
-  backupPath: "/custom/backups"
+  backupPath: "/custom/backups",
+  backupPath: "/custom/backups",
 });
+
+// Check if a command is available
+const hasGit = await CommandUtils.isCommandAvailable("git");
 ```
 
 ### Installing Java
@@ -74,57 +80,59 @@ defaultPaths.update({
 The library provides utilities to automatically find or download and install Java versions. This is useful for applications that need to ensure a specific Java version is available.
 
 ```typescript
-import { findJavaVersion } from "java-path";
-import { defaultPaths } from "java-path";
-import { JavaInfoService } from "java-path";
-import { taskManager } from "java-path";
+import {
+  findJavaVersion,
+  defaultPaths,
+  JavaInfoService,
+  taskManager,
+} from "java-path";
 import path from "path";
 
 async function getOrInstallJava(version = 23) {
   // First, check if the version is already installed
   const findResult = await findJavaVersion(defaultPaths.unpackPath, version);
-  
+
   if (!findResult) {
     // Get all available Java versions
     const allJavaVersions = await JavaInfoService.getInstallableVersions();
-    
+
     // Find the specific version
     const findVersion = await JavaInfoService.filter(
       allJavaVersions.data.releases,
       Number(version)
     );
-    
+
     if (!findVersion.data) {
       console.warn("No Java version found");
       return { allJavaVersions, version };
     }
-    
+
     // Download Java
     const downloadJava = await JavaInfoService.downloadJavaRelease(
       findVersion.data,
       `java-${version}.zip`
     );
-    
+
     if (!downloadJava || !downloadJava.data) {
       console.error("Failed to download Java");
       return { allJavaVersions, version };
     }
-    
+
     // Wait for download to complete
     await downloadJava.data.promise;
-    
+
     // Unpack the downloaded Java
     const { promise, taskId } = await taskManager.unpack(
       path.join(defaultPaths.downloadPath, `java-${version}.zip`)
     );
-    
+
     await promise;
-    
+
     // Verify the installation
     const newResult = await findJavaVersion(defaultPaths.unpackPath, version);
     return { findResult: newResult, downloadJava, allJavaVersions };
   }
-  
+
   return { findResult, allJavaVersions };
 }
 
@@ -143,7 +151,7 @@ You can find a complete example in `examples/install.ts`.
 ### CLI Commands
 
 ```bash
-# Run't main module
+# Run main module
 bun run index.ts
 
 # Run tests
@@ -172,15 +180,15 @@ Utilities for detecting the current platform and environment:
 import { env } from "java-path";
 
 // Platform information
-env.platform.name      // Platform name: "windows", "linux", "mac", "android"
-env.platform.ext        // Platform file extension: ".exe", "", "", ""
-env.isWindows()         // Returns true on Windows
-env.isLinux()           // Returns true on Linux
-env.isMac()             // Returns true on macOS
-env.isTermux()          // Returns true on Termux (Android)
+env.platform.name; // Platform name: "windows", "linux", "mac", "android"
+env.platform.ext; // Platform file extension: ".exe", "", "", ""
+env.isWindows(); // Returns true on Windows
+env.isLinux(); // Returns true on Linux
+env.isMac(); // Returns true on macOS
+env.isTermux(); // Returns true on Termux (Android)
 
 // Architecture information
-env.arch                 // Architecture: "x86", "x64", "arm64", etc.
+env.arch; // Architecture: "x86", "x64", "arm64", etc.
 ```
 
 ### Java Information (`getJavaInfo`)
@@ -223,9 +231,9 @@ const installations = await scanJavaInstallations("/path/to/search");
 
 // Find a specific Java version
 const java11 = await findJavaVersion("/path/to/search", 11, {
-  requireSameArch: true,  // Only return matching architecture
-  requireSameOS: true,    // Only return matching OS
-  requireValid: true       // Only return installations with valid java executable
+  requireSameArch: true, // Only return matching architecture
+  requireSameOS: true, // Only return matching OS
+  requireValid: true, // Only return installations with valid java executable
 });
 ```
 
@@ -247,7 +255,10 @@ const release = await JavaInfoService.filter(releases, 17);
 const result = await JavaInfoService.downloadJavaRelease(release, "jdk-17.zip");
 
 // Decompress a Java release
-const unpackResult = await JavaInfoService.decompressJavaRelease(filePath, destination);
+const unpackResult = await JavaInfoService.decompressJavaRelease(
+  filePath,
+  destination
+);
 ```
 
 ### File Utilities (`FileUtils`)
@@ -296,7 +307,7 @@ const files = await FolderUtils.getFiles(path, {
   minSize: 1024,
   maxSize: 10240,
   recursive: true,
-  depth: 3
+  depth: 3,
 });
 ```
 
@@ -310,22 +321,22 @@ import { taskManager } from "java-path";
 // Create a backup task
 const { taskId, promise } = taskManager.createBackup(sourceDir, {
   outputFilename: "backup.zip",
-  useZip: true
+  useZip: true,
 });
 
 // Restore from backup
 const restoreTask = taskManager.restoreBackup(backupPath, {
-  destinationFolderName: "restored-data"
+  destinationFolderName: "restored-data",
 });
 
 // Unpack archives
 const unpackTask = taskManager.unpack(archivePath, {
-  destination: "extracted-files"
+  destination: "extracted-files",
 });
 
 // Download files
 const downloadTask = taskManager.download(url, {
-  fileName: "downloaded-file.zip"
+  fileName: "downloaded-file.zip",
 });
 
 // Wait for task completion
@@ -362,7 +373,11 @@ const result = await CommandUtils.runCommand("git", ["status"]);
 Create consistent response objects:
 
 ```typescript
-import { createSuccessResponse, createErrorResponse, isSuccess } from "java-path";
+import {
+  createSuccessResponse,
+  createErrorResponse,
+  isSuccess,
+} from "java-path";
 
 // Create success response
 const success = createSuccessResponse(data);
@@ -377,18 +392,6 @@ if (isSuccess(response)) {
   // Handle error
 }
 ```
-
-## API Documentation
-
-For detailed API documentation, see [docs/api-reference.md](docs/api-reference.md).
-
-The documentation includes information about:
-- Environment Detection
-- Java Information & Installation
-- Task Management
-- File & Folder Utilities
-- Command Utilities
-- Validation Utilities
 
 ## Testing
 
@@ -420,7 +423,7 @@ console.log("Backup Path:", defaultPaths.backupPath);
 defaultPaths.update({
   downloadPath: "/path/to/custom/downloads",
   unpackPath: "/path/to/custom/unpacked",
-  backupPath: "/path/to/custom/backups"
+  backupPath: "/path/to/custom/backups",
 });
 
 // The taskManager will now use the new paths for all operations
@@ -436,13 +439,13 @@ import path from "node:path";
 defaultPaths.update({
   downloadPath: path.join(process.cwd(), "my-downloads"),
   unpackPath: path.join(process.cwd(), "my-unpacked"),
-  backupPath: path.join(process.cwd(), "my-backups")
+  backupPath: path.join(process.cwd(), "my-backups"),
 });
 
 // Now all task operations will use these paths
 const { taskId, promise } = taskManager.createBackup(sourceDir, {
   outputFilename: "backup.zip",
-  useZip: true
+  useZip: true,
 });
 
 // To reset paths to defaults:
@@ -481,131 +484,6 @@ bun test tests/utils/file.test.ts
 bun test tests/utils/validator.test.ts
 ```
 
-## Example Usage
-
-You can find complete examples in the `examples/` directory. Here's a basic usage example:
-
-```typescript
-// Run the basic example
-bun run examples/basic-usage.ts
-```
-
-For more detailed usage:
-
-```typescript
-import {
-  env,
-  getJavaInfoByVersion,
-  scanJavaInstallations,
-  FileUtils,
-  CommandUtils
-} from "./index.js";
-import { defaultPaths } from "./src/config.js";
-
-// Environment Detection
-console.log(`Platform: ${env.platform.name} (${env.platform.ext})`);
-console.log(`Architecture: ${env.arch}`);
-
-// Java Information
-const javaInfo = getJavaInfoByVersion("17");
-if (javaInfo) {
-  console.log(`Java 17 info:`, javaInfo);
-}
-
-// Scan for Java Installations
-const installations = await scanJavaInstallations(defaultPaths.unpackPath);
-console.log("Found Java installations:", installations);
-
-// File Operations
-const result = await FileUtils.writeFile("./output.txt", "Hello, World!");
-if (result.success) {
-  console.log("File created successfully");
-}
-
-// Command Operations
-const hasNode = await CommandUtils.isCommandAvailable("node");
-if (hasNode.success && hasNode.data) {
-  console.log("Node.js is available");
-}
-```
-
-## API
-
-### Environment Detection
-
-```typescript
-import { env, isWindows, isLinux, isMacOS } from "./src/platforms/env.js";
-
-// Check the current platform
-if (isWindows()) {
-  console.log("Running on Windows");
-}
-
-// Get platform information
-const platform = getPlatform();
-console.log(`Platform: ${platform.name}, Extension: ${platform.ext}`);
-
-// Get architecture
-const arch = getArchitecture();
-console.log(`Architecture: ${arch}`);
-```
-
-### Java Installation Management
-
-```typescript
-import { getJavaInfoByVersion, scanJavaInstallations } from "./index.js";
-import { defaultPaths } from "../src/config.js";
-
-// Get information for a specific Java version
-const javaInfo = getJavaInfoByVersion("17");
-if (javaInfo) {
-  console.log(`Java ${javaInfo.version} info:`, javaInfo);
-}
-
-// Scan for Java installations
-const installations = await scanJavaInstallations(defaultPaths.unpackPath);
-console.log("Found Java installations:", installations);
-```
-
-### File Utilities
-
-```typescript
-import { FileUtils } from "./src/utils/file.js";
-
-// Read a file
-const result = await FileUtils.readFile("./package.json");
-if (result.success) {
-  console.log("Package content:", result.data);
-}
-
-// Write a file
-await FileUtils.writeFile("./output.txt", "Hello, World!");
-
-// Check if a path exists
-const exists = await FileUtils.pathExists("./output.txt");
-if (exists.success && exists.data) {
-  console.log("File exists!");
-}
-```
-
-### Command Utilities
-
-```typescript
-import { CommandUtils } from "./src/utils/commands.js";
-
-// Check if a command is available
-const hasNode = await CommandUtils.isCommandAvailable("node");
-if (hasNode.success && hasNode.data) {
-  console.log("Node.js is available");
-}
-
-// Get the package manager
-const pm = CommandUtils.getPackageManager();
-if (pm) {
-  console.log(`Package manager detected: ${pm}`);
-}
-```
-
 ## Project Structure
 
 ```
@@ -613,16 +491,20 @@ Java-Path/
 ├── src/
 │   ├── platforms/
 │   │   ├── env.ts         # Environment detection utilities
-│   │   └── java.ts        # Java-specific platform utilities
+│   │   └── java.ts        # Java-specific platform utilities (sync)
 │   ├── services/
-│   │   └── installations.ts # Java installation scanning and management
-│   └── utils/
-│       ├── commands.ts    # Command execution utilities
-│       ├── file.ts        # File operation utilities
-│       ├── folder.ts      # Folder operation utilities
-│       └── validator.ts   # Response validation utilities
+│   │   ├── installations.ts # Java installation scanning
+│   │   ├── java.service.ts  # Main Java operations service (async)
+│   │   └── taskInstance.ts  # Task management logic
+│   ├── utils/
+│   │   ├── commands.ts    # Command execution utilities
+│   │   ├── file.ts        # File operation utilities
+│   │   ├── folder.ts      # Folder operation utilities
+│   │   └── validator.ts   # Response validation utilities
+│   └── config.ts          # Configuration (default paths)
 ├── tests/                 # Test files
-├── index.ts               # Main entry point with re-exports
+├── examples/              # Usage examples
+├── index.ts               # Main entry point
 └── README.md              # This file
 ```
 

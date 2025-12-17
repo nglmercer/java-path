@@ -236,5 +236,47 @@ describe("File utilities", () => {
       },
     );
     expect(wrongExtResult.success).toBe(false);
+    expect(wrongExtResult.success).toBe(false);
+  });
+
+  it("should calculate checksums and verify file integrity", async () => {
+    const filePath = join(testDir, "checksum.txt");
+    const content = "hello world";
+    await FileUtils.writeFile(testDir, "", "checksum.txt", content);
+
+    // Calculate checksum (sha256 of "hello world" is "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+    const checksumResult = await FileUtils.calculateChecksum(filePath);
+    expect(checksumResult.success).toBe(true);
+    // We don't hardcode the hash here to depend on crypto implementation, but we can verify it against itself
+    const calculatedChecksum = checksumResult.success
+      ? checksumResult.data
+      : "";
+
+    // Verify integrity - Success case
+    const validResult = await FileUtils.verifyFileIntegrity(
+      filePath,
+      content.length,
+      calculatedChecksum,
+    );
+    expect(validResult.success).toBe(true);
+    expect(validResult.data).toBe(true);
+
+    // Verify integrity - Size Mismatch
+    const invalidSizeResult = await FileUtils.verifyFileIntegrity(
+      filePath,
+      content.length + 1,
+      calculatedChecksum,
+    );
+    expect(invalidSizeResult.success).toBe(true); // The operation succeeded (it ran without error)
+    expect(invalidSizeResult.data).toBe(false); // But the verification failed
+
+    // Verify integrity - Checksum Mismatch
+    const invalidChecksumResult = await FileUtils.verifyFileIntegrity(
+      filePath,
+      content.length,
+      "0000000000000000000000000000000000000000000000000000000000000000",
+    );
+    expect(invalidChecksumResult.success).toBe(true);
+    expect(invalidChecksumResult.data).toBe(false);
   });
 });

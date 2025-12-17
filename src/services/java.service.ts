@@ -6,7 +6,7 @@ import { CommandUtils } from "../utils/commands.js";
 import { defaultPaths } from "../config.js";
 import { taskManager } from "../services/taskInstance.js";
 import { FileUtils, asyncHandler } from "../utils/file.js";
-import { findJavaVersion, type InstalledJavaVersion } from "./installations.js";
+import { findJavaVersion, scanJavaInstallations, type InstalledJavaVersion } from "./installations.js";
 import type {
   DownloadResult,
   TaskOperation,
@@ -27,7 +27,8 @@ export interface JavaRelease {
   featureVersion: number; // e.g. 21
   releaseName: string; // e.g. "jdk-21.0.3+9"
   downloadUrl: string; // direct link to the archive
-  checksumUrl: string; // sha256 link
+  checksumUrl: string; // sha256 string
+  size: number; // size in bytes
   arch: string; // e.g. "x64", "aarch64"
   os: string; // e.g. "windows", "linux", "mac"
   [key: string]: string | number;
@@ -241,12 +242,39 @@ async function _downloadJavaRelease(
   }
 
   //const filePath = path.join(downloadPath, path.basename(release.downloadUrl));
-  const result = await taskManager.download(release.downloadUrl, {
+  const { taskId, promise } = await taskManager.download(release.downloadUrl, {
     fileName,
     onComplete,
   });
 
-  return result;
+  const wrappedPromise = promise.then(async (result) => {
+    // Determine the file path
+    const actualFileName = fileName || path.basename(release.downloadUrl);
+    const filePath = path.join(defaultPaths.downloadPath, actualFileName);
+
+    // Verify integrity
+    // Note: checksumUrl in JavaRelease currently holds the actual checksum string based on the parsing logic
+    const validation = await FileUtils.verifyFileIntegrity(
+      filePath,
+      release.size,
+      release.checksumUrl,
+    );
+
+    if (!validation.success || !validation.data) {
+      console.error(
+        `Verification failed for ${actualFileName}. Deleting corrupt file.`,
+      );
+      // Clean up failed download
+      await FileUtils.deletePath(defaultPaths.downloadPath, actualFileName);
+      throw new Error(
+        "File verification failed: The downloaded file is incomplete or corrupted.",
+      );
+    }
+
+    return result;
+  });
+
+  return { taskId, promise: wrappedPromise };
 }
 async function _decompressJavaRelease(
   filePath: string,
@@ -258,12 +286,9 @@ async function _decompressJavaRelease(
   const result = await promise;
   return result;
 }
-async function _getInstallationsByPath(): Promise<any[]> {
+async function _getInstallationsByPath(): Promise<InstalledJavaVersion[]> {
   const defaultJavaPath = path.join(defaultPaths.unpackPath);
-  if (await FileUtils.pathExists(defaultJavaPath)) {
-    return [];
-  }
-  return [];
+  return await scanJavaInstallations(defaultJavaPath);
 }
 export const JavaInfoService = {
   getInstallableVersions: asyncHandler<JavaVersionsInfo, any>(

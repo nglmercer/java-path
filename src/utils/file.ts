@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import {
   createSuccessResponse,
   createErrorResponse,
@@ -292,6 +293,42 @@ const _checkFileValidity = async (
   return report;
 };
 
+const _calculateChecksum = async (
+  filePath: string,
+  algorithm: string = "sha256",
+): Promise<string> => {
+  const fileBuffer = await fs.readFile(filePath);
+  const hashSum = createHash(algorithm);
+  hashSum.update(fileBuffer);
+  return hashSum.digest("hex");
+};
+
+const _verifyFileIntegrity = async (
+  filePath: string,
+  expectedSize: number,
+  expectedChecksum?: string,
+  algorithm: string = "sha256",
+): Promise<boolean> => {
+  try {
+    const stats = await fs.stat(filePath);
+    if (stats.size !== expectedSize) {
+       console.warn(`File size mismatch: expected ${expectedSize}, got ${stats.size}`);
+       return false;
+    }
+    if (expectedChecksum) {
+        const checksum = await _calculateChecksum(filePath, algorithm);
+        if (checksum.toLowerCase() !== expectedChecksum.toLowerCase()) {
+            console.warn(`Checksum mismatch: expected ${expectedChecksum}, got ${checksum}`);
+            return false;
+        }
+    }
+    return true;
+  } catch (error) {
+    console.error(`Error verifying file integrity: ${error}`);
+    return false;
+  }
+};
+
 // --- API Pública Exportada ---
 
 /**
@@ -322,6 +359,12 @@ export const FileUtils = {
 
   /** Realiza una validación completa de un archivo (existencia, tipo, tamaño). */
   checkFileValidity: asyncHandler(_checkFileValidity),
+
+  /** Calcula el checksum de un archivo. */
+  calculateChecksum: asyncHandler(_calculateChecksum),
+
+  /** Verifica la integridad de un archivo mediante su tamaño y checksum opcional. */
+  verifyFileIntegrity: asyncHandler(_verifyFileIntegrity),
 };
 /*
 // --- Ejemplo de Uso ---

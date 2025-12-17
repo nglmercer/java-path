@@ -27,7 +27,7 @@ export type {
 
 // Re-export all Java services
 export { JavaInfoService, getJavaInfo } from "./src/services/java.service.js";
-export * from "./src/services/installations.js";
+// export * from "./src/services/installations.js"; // Removed duplicate
 
 // ─────────────────────────────────────────────────────────────
 // Re-export all utilities
