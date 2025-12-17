@@ -40,6 +40,15 @@ if (env.isMac()) { /* macOS-specific code */ }
 if (env.isTermux()) { /* Termux-specific code */ }
 ```
 
+**API Reference:**
+- `env.platform.name`: Platform name ("windows", "linux", "mac", "android")
+- `env.platform.ext`: Executable extension (".exe" on Windows, "" on others)
+- `env.arch`: System architecture ("x64", "arm64", "x86", etc.)
+- `env.isWindows()`: Returns true if running on Windows
+- `env.isLinux()`: Returns true if running on Linux
+- `env.isMac()`: Returns true if running on macOS
+- `env.isTermux()`: Returns true if running in Termux (Android)
+
 ### 2. Java Information & Management
 Utilities for retrieving Java version info and finding installed JDKs.
 
@@ -59,6 +68,42 @@ const java17 = await findJavaVersion("/usr/lib/jvm", 17, {
   requireSameArch: true,
 });
 ```
+
+**API Reference:**
+
+#### `getJavaInfo(version)`
+Retrieves metadata for a specific Java version.
+
+**Parameters:**
+- `version`: Java version number (e.g., 8, 11, 17, 21)
+
+**Returns:** `Promise<JavaInfoStandard | JavaInfoTermux>`
+- `downloadUrl`: Download URL for the Java version
+- `expectedFilename`: Expected filename for the download
+- `version`: Java version number
+- `platform`: Platform-specific information
+
+#### `scanJavaInstallations(directory)`
+Scans a directory for Java installations.
+
+**Parameters:**
+- `directory`: Path to scan for Java installations
+
+**Returns:** `Promise<InstalledJavaVersion[]>`
+- Array of installed Java versions with paths and metadata
+
+#### `findJavaVersion(directory, version, options)`
+Finds a specific Java version in a directory.
+
+**Parameters:**
+- `directory`: Directory to search
+- `version`: Java version to find
+- `options`: Search options
+  - `requireValid`: Check if Java binary is executable
+  - `requireSameArch`: Require architecture match
+  - `requireSameOS`: Require OS match
+
+**Returns:** `Promise<InstalledJavaVersion | null>`
 
 ### 3. Java Service (`JavaInfoService`)
 Advanced operations for fetching Java versions and downloading releases.
@@ -86,6 +131,43 @@ await JavaInfoService.decompressJavaRelease(
   "/unpacked/jdk-17"
 );
 ```
+
+**API Reference:**
+
+#### `JavaInfoService.getInstallableVersions()`
+Fetches available Java versions from Adoptium API.
+
+**Returns:** `Promise<{ available: number[], releases: JavaRelease[] }>`
+- `available`: Array of available version numbers
+- `releases`: Array of release objects with download information
+
+#### `JavaInfoService.filter(releases, version)`
+Filters releases to find specific version.
+
+**Parameters:**
+- `releases`: Array of releases from `getInstallableVersions()`
+- `version`: Java version to filter for
+
+**Returns:** `JavaRelease | undefined`
+
+#### `JavaInfoService.downloadJavaRelease(release, filename)`
+Downloads a Java release.
+
+**Parameters:**
+- `release`: Release object from filtering
+- `filename`: Filename for the downloaded file
+
+**Returns:** `Promise<TaskOperation>`
+- Contains `taskId` and `promise` for tracking download progress
+
+#### `JavaInfoService.decompressJavaRelease(filePath, destination)`
+Decompresses a downloaded Java archive.
+
+**Parameters:**
+- `filePath`: Path to the downloaded archive
+- `destination`: Destination directory for extraction
+
+**Returns:** `Promise<void>`
 
 ### 4. Task Manager
 Handles long-running async operations with progress tracking.
@@ -125,6 +207,58 @@ taskManager.on("task:completed", (task) => {
 });
 ```
 
+**API Reference:**
+
+#### `taskManager.createBackup(source, options)`
+Creates a backup of files or directories.
+
+**Parameters:**
+- `source`: Path to backup
+- `options`: Backup options
+  - `outputFilename`: Name of backup file
+  - `useZip`: Use ZIP compression
+  - `compressionLevel`: Compression level (1-9)
+
+**Returns:** `TaskOperation`
+
+#### `taskManager.restoreBackup(backupPath, options)`
+Restores a backup.
+
+**Parameters:**
+- `backupPath`: Path to backup file
+- `options`: Restore options
+  - `destination`: Destination directory
+
+**Returns:** `TaskOperation`
+
+#### `taskManager.unpack(archivePath, options)`
+Extracts an archive.
+
+**Parameters:**
+- `archivePath`: Path to archive file
+- `options`: Extraction options
+  - `destination`: Destination directory
+  - `overwrite`: Overwrite existing files
+
+**Returns:** `TaskOperation`
+
+#### `taskManager.download(url, options)`
+Downloads a file from URL.
+
+**Parameters:**
+- `url`: URL to download from
+- `options`: Download options
+  - `fileName`: Name for downloaded file
+  - `headers`: HTTP headers
+  - `timeout`: Request timeout
+
+**Returns:** `TaskOperation`
+
+#### Event Handling
+- `taskManager.on("task:progress", callback)`: Fired when task progress updates
+- `taskManager.on("task:completed", callback)`: Fired when task completes
+- `taskManager.on("task:failed", callback)`: Fired when task fails
+
 ### 5. File & Folder Utilities
 File system helpers for common operations.
 
@@ -151,6 +285,93 @@ const javaFiles = await FolderUtils.getFiles("./src", {
   recursive: true,
 });
 ```
+
+**FileUtils API:**
+
+#### `FileUtils.writeFile(base, subDir, name, content)`
+Safely writes a file, creating parent directories.
+
+**Parameters:**
+- `base`: Base directory
+- `subDir`: Subdirectory path
+- `name`: File name
+- `content`: File content
+
+**Returns:** `Promise<ServiceResponse<string>>`
+
+#### `FileUtils.pathExists(path)`
+Checks if path exists.
+
+**Parameters:**
+- `path`: Path to check
+
+**Returns:** `Promise<ServiceResponse<boolean>>`
+
+#### `FileUtils.delete(path)`
+Recursively deletes path.
+
+**Parameters:**
+- `path`: Path to delete
+
+**Returns:** `Promise<ServiceResponse<void>>`
+
+#### `FileUtils.rename(oldPath, newPath)`
+Renames file or directory.
+
+**Parameters:**
+- `oldPath`: Current path
+- `newPath`: New path
+
+**Returns:** `Promise<ServiceResponse<void>>`
+
+#### `FileUtils.checkFileValidity(path, options)`
+Validates file properties.
+
+**Parameters:**
+- `path`: File path
+- `options`: Validation options
+  - `maxSize`: Maximum file size
+  - `allowedExtensions`: Allowed file extensions
+  - `minSize`: Minimum file size
+
+**Returns:** `Promise<ServiceResponse<boolean>>`
+
+**FolderUtils API:**
+
+#### `FolderUtils.getFolderDetails(path, options)`
+Gets detailed file list with stats.
+
+**Parameters:**
+- `path`: Directory path
+- `options`: Options
+  - `recursive`: Search recursively
+  - `includeStats`: Include file statistics
+
+**Returns:** `Promise<ServiceResponse<FileDetails[]>>`
+
+#### `FolderUtils.getDirectorySummary(path)`
+Gets directory statistics.
+
+**Parameters:**
+- `path`: Directory path
+
+**Returns:** `Promise<ServiceResponse<DirectorySummary>>`
+- `totalSize`: Total size in bytes
+- `fileCount`: Number of files
+- `directoryCount`: Number of directories
+
+#### `FolderUtils.getFiles(path, filters)`
+Finds files matching criteria.
+
+**Parameters:**
+- `path`: Directory path
+- `filters`: Filter options
+  - `extension`: File extension to match
+  - `recursive`: Search recursively
+  - `minSize`: Minimum file size
+  - `maxSize`: Maximum file size
+
+**Returns:** `Promise<ServiceResponse<string[]>>`
 
 ### 6. Command Utilities
 System command execution and package management.
@@ -192,6 +413,63 @@ const javaPaths = detectJavaPathsSync();
 const isValid = validateJavaPathSync("/path/to/java");
 ```
 
+**API Reference:**
+
+#### `CommandUtils.isCommandAvailable(command)`
+Checks if command exists in PATH.
+
+**Parameters:**
+- `command`: Command name to check
+
+**Returns:** `Promise<ServiceResponse<boolean>>`
+
+#### `CommandUtils.getPackageManager()`
+Detects active package manager.
+
+**Returns:** `Promise<ServiceResponse<"npm" | "yarn" | "pnpm" | "bun">>`
+
+#### `CommandUtils.isPackageInstalled(name, manager?)`
+Checks if package is installed.
+
+**Parameters:**
+- `name`: Package name
+- `manager`: Package manager (optional, auto-detected)
+
+**Returns:** `Promise<ServiceResponse<boolean>>`
+
+#### `CommandUtils.runCommand(cmd, args)`
+Executes shell command.
+
+**Parameters:**
+- `cmd`: Command to execute
+- `args`: Command arguments
+
+**Returns:** `Promise<ServiceResponse<CommandResult>>`
+- `stdout`: Command output
+- `stderr`: Error output
+- `exitCode`: Exit code
+
+#### `CommandUtils.detectJavaPaths()`
+Detects Java installation paths.
+
+**Returns:** `Promise<ServiceResponse<string[]>>`
+- Array of Java executable paths
+
+#### `CommandUtils.validateJavaPath(javaPath)`
+Validates Java path.
+
+**Parameters:**
+- `javaPath`: Path to validate
+
+**Returns:** `Promise<ServiceResponse<boolean>>`
+
+#### Synchronous Methods
+- `detectJavaPathsSync()`: Returns `string[]`
+- `validateJavaPathSync(javaPath)`: Returns `boolean`
+- `isCommandAvailable(commandName)`: Returns `boolean`
+- `getPackageManager()`: Returns `PackageManager`
+- `isPackageInstalled(packageName, pm?)`: Returns `boolean`
+
 ### 7. Validation Utilities
 Standardized response types for consistent API handling.
 
@@ -211,6 +489,40 @@ if (isSuccess(result)) {
 }
 ```
 
+**API Reference:**
+
+#### `ServiceResponse<T>` Type
+```typescript
+type ServiceResponse<T> =
+  | { success: true; data: T }
+  | { success: false; error: string; data?: T };
+```
+
+#### `createSuccessResponse(data)`
+Creates success response.
+
+**Parameters:**
+- `data`: Success data
+
+**Returns:** `ServiceResponse<T>`
+
+#### `createErrorResponse(msg, data?)`
+Creates error response.
+
+**Parameters:**
+- `msg`: Error message
+- `data`: Optional error data
+
+**Returns:** `ServiceResponse<never>`
+
+#### `isSuccess(response)`
+Type guard for success responses.
+
+**Parameters:**
+- `response`: Response to check
+
+**Returns:** `response is { success: true; data: T }`
+
 ## Configuration
 Customize default paths for downloads, unpacking, and backups.
 
@@ -228,6 +540,20 @@ defaultPaths.update({
 // Reset to defaults
 // defaultPaths.reset();
 ```
+
+**API Reference:**
+
+#### `defaultPaths.update(options)`
+Updates default paths.
+
+**Parameters:**
+- `options`: Path options
+  - `downloadPath`: Directory for downloads
+  - `unpackPath`: Directory for extractions
+  - `backupPath`: Directory for backups
+
+#### `defaultPaths.reset()`
+Resets to default paths.
 
 ## Project Structure
 ```
@@ -271,6 +597,169 @@ Available bun scripts:
 | `bun run build` | Build for production |
 | `bun run examples/install.ts` | Run installation example |
 
+## Advanced Usage Examples
+
+### Complete Java Installation Workflow
+```typescript
+import { 
+  JavaInfoService, 
+  taskManager, 
+  defaultPaths,
+  CommandUtils 
+} from "java-path";
+
+async function installJava(version: number) {
+  // 1. Get available versions
+  const versions = await JavaInfoService.getInstallableVersions();
+  
+  // 2. Filter for desired version
+  const release = await JavaInfoService.filter(versions.releases, version);
+  if (!release) {
+    throw new Error(`Java ${version} not available`);
+  }
+  
+  // 3. Download Java
+  const downloadTask = await JavaInfoService.downloadJavaRelease(
+    release,
+    `jdk-${version}.zip`
+  );
+  
+  // Track download progress
+  taskManager.on("task:progress", (task) => {
+    if (task.id === downloadTask.taskId) {
+      console.log(`Download progress: ${task.progress}%`);
+    }
+  });
+  
+  // Wait for download
+  await downloadTask.data.promise;
+  
+  // 4. Decompress
+  const installPath = `java-${version}`;
+  await JavaInfoService.decompressJavaRelease(
+    `downloads/jdk-${version}.zip`,
+    installPath
+  );
+  
+  console.log(`Java ${version} installed to ${installPath}`);
+}
+```
+
+### Java Path Detection and Validation
+```typescript
+import { CommandUtils, findJavaVersion } from "java-path";
+
+async function validateJavaSetup() {
+  // Detect all Java installations
+  const detectionResult = await CommandUtils.detectJavaPaths();
+  
+  if (detectionResult.success && detectionResult.data.length > 0) {
+    console.log("Found Java installations:");
+    
+    for (const javaPath of detectionResult.data) {
+      // Validate each path
+      const validationResult = await CommandUtils.validateJavaPath(javaPath);
+      
+      if (validationResult.success && validationResult.data) {
+        console.log(`✓ Valid: ${javaPath}`);
+        
+        // Get version info
+        const versionResult = await CommandUtils.runCommand(javaPath, ["-version"]);
+        if (versionResult.success) {
+          console.log(`  Version output: ${versionResult.data.stdout}`);
+        }
+      } else {
+        console.log(`✗ Invalid: ${javaPath}`);
+      }
+    }
+  } else {
+    console.log("No Java installations found");
+  }
+}
+```
+
+### Cross-Platform File Operations
+```typescript
+import { FileUtils, FolderUtils, env } from "java-path";
+
+async function manageJavaFiles() {
+  // Platform-aware path handling
+  const javaDir = env.isWindows() 
+    ? "C:\\Program Files\\Java" 
+    : "/usr/lib/jvm";
+  
+  // Check if directory exists
+  const exists = await FileUtils.pathExists(javaDir);
+  
+  if (exists.success && exists.data) {
+    // Get detailed folder information
+    const details = await FolderUtils.getFolderDetails(javaDir, {
+      recursive: true,
+      includeStats: true
+    });
+    
+    if (details.success) {
+      console.log(`Found ${details.data.length} items in Java directory`);
+      
+      // Filter for Java installations
+      const javaInstallations = details.data.filter(item => 
+        item.name.includes("jdk") || item.name.includes("jre")
+      );
+      
+      console.log(`Java installations: ${javaInstallations.length}`);
+    }
+    
+    // Get directory summary
+    const summary = await FolderUtils.getDirectorySummary(javaDir);
+    if (summary.success) {
+      console.log(`Total size: ${summary.data.totalSize} bytes`);
+      console.log(`Files: ${summary.data.fileCount}, Directories: ${summary.data.directoryCount}`);
+    }
+  }
+}
+```
+
+## Error Handling Best Practices
+
+```typescript
+import { 
+  createSuccessResponse, 
+  createErrorResponse, 
+  isSuccess,
+  ServiceResponse 
+} from "java-path";
+
+async function robustJavaOperation(): Promise<ServiceResponse<string>> {
+  try {
+    // Multiple validation steps
+    const javaPaths = await CommandUtils.detectJavaPaths();
+    if (!isSuccess(javaPaths)) {
+      return createErrorResponse("Failed to detect Java paths", javaPaths.error);
+    }
+    
+    if (javaPaths.data.length === 0) {
+      return createErrorResponse("No Java installations found");
+    }
+    
+    // Validate first Java path
+    const firstPath = javaPaths.data[0];
+    const validation = await CommandUtils.validateJavaPath(firstPath);
+    
+    if (!isSuccess(validation) || !validation.data) {
+      return createErrorResponse("Java path validation failed", firstPath);
+    }
+    
+    return createSuccessResponse(firstPath);
+    
+  } catch (error) {
+    return createErrorResponse(
+      "Unexpected error during Java operation", 
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+}
+```
+
 ## Key Features Summary
 - **Platform Detection**: Auto-detect OS and architecture
 - **Java Version Management**: Scan, validate, and manage Java installations
@@ -295,3 +784,46 @@ Available bun scripts:
 - **Cross-platform support**: Works on Windows, macOS, and Linux
 - **Multiple detection methods**: Uses `which`/`where` commands, JAVA_HOME, and common installation directories
 - **Synchronous and asynchronous versions**: Available for both sync and async usage
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Java not detected**
+   - Check if Java is installed and in PATH
+   - Verify JAVA_HOME environment variable
+   - Run `java -version` manually to confirm installation
+
+2. **Permission errors**
+   - Ensure proper file permissions for Java directories
+   - Run with appropriate privileges on Linux/macOS
+   - Check Windows UAC settings
+
+3. **Network issues during download**
+   - Check internet connectivity
+   - Verify firewall settings
+   - Try alternative download sources
+
+4. **Termux-specific issues**
+   - Ensure Termux has storage permissions
+   - Check available storage space
+   - Verify Termux is updated to latest version
+
+### Debug Mode
+Enable debug logging for detailed operation information:
+
+```typescript
+// Set debug environment variable
+process.env.JAVA_PATH_DEBUG = "true";
+
+// Now operations will log detailed information
+const javaPaths = await CommandUtils.detectJavaPaths();
+```
+
+## Performance Considerations
+
+- Use synchronous methods for simple checks in performance-critical paths
+- Batch file operations when possible
+- Use specific directory scans instead of recursive when not needed
+- Cache Java installation information for repeated operations
+- Consider using `findJavaVersion` with specific paths instead of scanning entire directories
