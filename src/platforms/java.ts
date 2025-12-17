@@ -1,6 +1,6 @@
 import * as path from "path";
 import { existsSync, readdirSync } from "fs";
-import { env } from "./env.js"; // Importamos el objeto env que contiene todo
+import { env } from "./env.js"; // Import the env object containing platform details
 import { isPackageInstalled } from "../utils/commands.js";
 import { defaultPaths } from "../config.js";
 import {
@@ -11,11 +11,11 @@ import {
 } from "../constants.js";
 
 // ─────────────────────────────────────────────────────────────
-// Interfaces de Salida
+// Output Interfaces
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Información de Java específica para un entorno Termux.
+ * Java information specific to a Termux environment.
  */
 export interface JavaInfoTermux {
   isTermux: true;
@@ -27,40 +27,40 @@ export interface JavaInfoTermux {
 }
 
 /**
- * Información de Java para descarga y gestión en sistemas estándar (Windows, macOS, Linux).
+ * Java information for download and management on standard systems (Windows, macOS, Linux).
  */
 export interface JavaInfoStandard {
   isTermux: false;
   url: string;
   filename: string;
   version: string;
-  downloadPath: string; // Ruta relativa para el archivo descargado
-  unpackPath: string; // Ruta relativa para la carpeta descomprimida
+  downloadPath: string; // Relative path for the downloaded file
+  unpackPath: string; // Relative path for the unpacked folder
   absoluteDownloadPath: string;
   absoluteUnpackPath: string;
-  javaBinPath: string; // Ruta absoluta a la carpeta 'bin' de Java
+  javaBinPath: string; // Absolute path to the Java 'bin' folder
 }
 
-// El tipo de retorno combinado
+// Combined return type
 export type JavaInfo = JavaInfoTermux | JavaInfoStandard;
 
 // ─────────────────────────────────────────────────────────────
-// Función Principal
+// Main Function
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Obtiene la información necesaria para descargar o verificar una versión de Java.
- * Devuelve un objeto con detalles para Termux o para sistemas estándar.
+ * Retrieves the information necessary to download or verify a Java version.
+ * Returns an object with details for Termux or standard systems.
  *
- * @param javaVersion La versión de Java a buscar (ej. 8, 11, 17).
- * @returns Un objeto `JavaInfo` con los detalles, o `null` si la plataforma/arquitectura no es compatible.
+ * @param javaVersion The Java version to look for (e.g., 8, 11, 17).
+ * @returns A `JavaInfo` object with the details, or `null` if the platform/architecture is not supported.
  */
 export const getJavaInfoByVersion = (
   javaVersion: string | number,
-) => {
+): JavaInfo | null => {
   const versionStr = String(javaVersion ?? "");
 
-  // --- Caso Especial: Termux ---
+  // --- Special Case: Termux ---
   if (env.isTermux()) {
     const packageName = `${TERMUX_CONSTANTS.PACKAGE_PREFIX}${versionStr}`;
     return {
@@ -73,14 +73,14 @@ export const getJavaInfoByVersion = (
     };
   }
 
-  // --- Caso Estándar: Windows, Linux, macOS ---
+  // --- Standard Case: Windows, Linux, macOS ---
   let platform;
   try {
-    // Usamos el helper de env.ts para obtener la plataforma
+    // Use the helper from env.ts to get the platform
     platform = env.platform;
   } catch (error) {
     console.error(error);
-    return null; // Plataforma no soportada
+    return null; // Unsupported platform
   }
 
   const arch = ADOPTIUM_ARCH_MAP[process.arch];
@@ -90,23 +90,23 @@ export const getJavaInfoByVersion = (
     return null;
   }
 
-  // Construir la información para la descarga
+  // Construct download information
   const resultURL = `${ADOPTIUM_API_BASE_URL}/binary/latest/${versionStr}/ga/${platform.name}/${arch}/jdk/hotspot/normal/eclipse?project=jdk`;
   const filename = `Java-${versionStr}-${arch}${platform.ext}`;
 
   const relativeDownloadPath = path.join(defaultPaths.backupPath, filename);
-  const relativeUnpackPath = path.join(defaultPaths.unpackPath, `jdk-${versionStr}`); // Nombre de carpeta más genérico
+  const relativeUnpackPath = path.join(defaultPaths.unpackPath, `jdk-${versionStr}`); // More generic folder name
 
   const absoluteDownloadPath = path.resolve(relativeDownloadPath);
   const absoluteUnpackPath = path.resolve(relativeUnpackPath);
 
-  // Lógica para encontrar la carpeta 'bin' dentro del JDK descomprimido
-  // (a menudo viene dentro de otra carpeta como 'jdk-17.0.2+8')
+  // Logic to find the 'bin' folder inside the unpacked JDK
+  // (often it comes inside another folder like 'jdk-17.0.2+8')
   let javaBinPath = path.join(absoluteUnpackPath, FOLDER_NAMES.BIN);
   if (!existsSync(javaBinPath) && existsSync(absoluteUnpackPath)) {
     try {
       const files = readdirSync(absoluteUnpackPath);
-      // En macOS, la estructura es diferente, el bin está en Contents/Home/bin
+      // On macOS, the structure is different; bin is at Contents/Home/bin
       const macOsHomePath = path.join(
         absoluteUnpackPath,
         files[0]!,
@@ -116,14 +116,14 @@ export const getJavaInfoByVersion = (
       if (env.isMacOS() && existsSync(macOsHomePath)) {
         javaBinPath = path.join(macOsHomePath, FOLDER_NAMES.BIN);
       } else {
-        // Para Linux/Windows, buscar una carpeta que empiece con 'jdk-'
+        // For Linux/Windows, look for a folder starting with 'jdk-'
         const jdkFolder = files.find((file) => file.startsWith(FOLDER_NAMES.JDK_PREFIX));
         if (jdkFolder) {
           javaBinPath = path.join(absoluteUnpackPath, jdkFolder, FOLDER_NAMES.BIN);
         }
       }
     } catch (e) {
-      // Ignorar si no se puede leer el directorio, javaBinPath mantendrá su valor por defecto
+      // Ignore if the directory cannot be read; javaBinPath will keep its default value
       console.warn(
         `Could not dynamically find '${FOLDER_NAMES.BIN}' path in ${absoluteUnpackPath}.`,
       );

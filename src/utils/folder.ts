@@ -52,7 +52,7 @@ interface GetFolderOptions {
 }
 
 const statsCache = new Map<string, { stats: FileStats; timestamp: number }>();
-const CACHE_DURATION = 30000; // 30 segundos
+const CACHE_DURATION = 30000; // 30 seconds
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return "0 B";
@@ -181,7 +181,7 @@ const getItemStats = async (
       ino: stats.ino,
     };
 
-    // Guardar en cache
+    // Save to cache
     if (useCache) {
       statsCache.set(itemPath, {
         stats: fileStats,
@@ -260,13 +260,13 @@ const getFolderDetails = async (
               ? undefined
               : path.extname(entry.name).toLowerCase();
 
-            // Aplicar filtros de tamaño
+            // Apply size filters
             if (!isDirectory) {
               if (minSize !== undefined && stats.size < minSize) return null;
               if (maxSize !== undefined && stats.size > maxSize) return null;
             }
 
-            // Aplicar filtros de fecha
+            // Apply date filters
             if (modifiedAfter && stats.mtime < modifiedAfter) return null;
             if (modifiedBefore && stats.mtime > modifiedBefore) return null;
 
@@ -294,7 +294,7 @@ const getFolderDetails = async (
               depth: currentDepth,
             };
 
-            // Aplicar filtros adicionales
+            // Apply additional filters
             if (filterExtensions && !isDirectory) {
               if (!filterExtensions.includes(extension || "")) return null;
             }
@@ -466,7 +466,7 @@ const getDirectorySummary = async (
   if (includeFileTypes) {
     const fileTypes: Record<string, number> = {};
     files.forEach((file) => {
-      const ext = file.extension || "sin extensión";
+      const ext = file.extension || "no extension";
       fileTypes[ext] = (fileTypes[ext] || 0) + 1;
     });
     result.fileTypes = fileTypes;
@@ -525,7 +525,7 @@ const getQuickDirectoryStats = async (
   }
 };
 
-// Limpiar cache
+// Clear cache
 const clearStatsCache = (): void => {
   statsCache.clear();
 };

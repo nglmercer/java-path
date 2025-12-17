@@ -4,27 +4,20 @@ import { createHash } from "node:crypto";
 import {
   createSuccessResponse,
   createErrorResponse,
-  isSuccess,
   type ServiceResponse,
 } from "./validator.js";
-// --- Constantes ---
+// --- Constants ---
 import { ALLOWED_FILE_EXTENSIONS } from "../constants.js";
 
-// --- Constantes ---
+// --- Constants ---
 export const ALLOWED_EXTENSIONS = ALLOWED_FILE_EXTENSIONS;
 
-// --- Tipos y Helpers Fundamentales ---
+// --- Fundamental Types and Helpers ---
 
 /**
- * Define la estructura de respuesta estándar para todas las operaciones.
- * Es una unión discriminada para un manejo de tipos seguro.
- */
-
-
-/**
- * Wrapper para funciones asíncronas que estandariza el manejo de errores y la respuesta.
- * @param fn La función asíncrona a ejecutar.
- * @returns Una nueva función que devuelve un objeto ServiceResponse.
+ * Wrapper for async functions to standardize error handling and response.
+ * @param fn The async function to execute.
+ * @returns A new function that returns a ServiceResponse object.
  */
 export function asyncHandler<T, A extends unknown[]>(
   fn: (...args: A) => Promise<T>,
@@ -34,18 +27,18 @@ export function asyncHandler<T, A extends unknown[]>(
       const data = await fn(...args);
       return createSuccessResponse(data);
     } catch (error) {
-      // Asegura que siempre se capture un mensaje de error legible.
+      // Ensure a readable error message is always captured.
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      console.error(`Error en la operación '${fn.name}': ${errorMessage}`);
+      console.error(`Error in operation '${fn.name}': ${errorMessage}`);
       return createErrorResponse(errorMessage);
     }
   };
 }
 
-// --- Lógica Interna (Implementación Real) ---
+// --- Internal Logic (Real Implementation) ---
 
-/** Valida si una extensión es permitida. */
+/** Validates if a file extension is allowed. */
 async function _isExtensionAllowed(filePath: string): Promise<boolean> {
   try {
     const stats = await fs.stat(filePath);
@@ -70,8 +63,8 @@ const _createFile = async (
   content: string = "",
 ): Promise<string> => {
   const filePath = path.join(basePath, folderName, fileName);
-  if (!_isExtensionAllowed(filePath)) {
-    throw new Error(`Extensión no permitida para el archivo: '${fileName}'`);
+  if (!(await _isExtensionAllowed(filePath))) {
+    throw new Error(`Extension not allowed for file: '${fileName}'`);
   }
   const folderPath = path.dirname(filePath);
   await fs.mkdir(folderPath, { recursive: true });
@@ -85,7 +78,7 @@ const _readFile = async (
   fileName: string,
 ): Promise<string> => {
   const filePath = path.join(basePath, folderName, fileName);
-  // No es necesario verificar si existe, fs.readFile lanzará un error que será capturado.
+  // No need to check existence, fs.readFile will throw an error if it doesn't exist.
   return fs.readFile(filePath, "utf8");
 };
 
@@ -96,8 +89,8 @@ const _writeFile = async (
   content: string,
 ): Promise<string> => {
   const filePath = path.join(basePath, folderName, fileName);
-  if (!_isExtensionAllowed(filePath)) {
-    throw new Error(`Extensión no permitida para el archivo: '${fileName}'`);
+  if (!(await _isExtensionAllowed(filePath))) {
+    throw new Error(`Extension not allowed for file: '${fileName}'`);
   }
   const folderPath = path.dirname(filePath);
   await fs.mkdir(folderPath, { recursive: true });
@@ -110,7 +103,7 @@ const _deletePath = async (
   relativePath: string,
 ): Promise<true> => {
   const fullPath = path.join(basePath, relativePath);
-  // fs.rm lo manejará si no existe (lanzará error)
+  // fs.rm will handle if it doesn't exist (it will throw error if not suppressed, but we want errors to be caught by asyncHandler)
   await fs.rm(fullPath, { recursive: true, force: true });
   return true;
 };
@@ -124,19 +117,19 @@ const _renameFile = async (
   const oldPath = path.join(basePath, folderName, oldName);
   const newPath = path.join(basePath, folderName, newName);
 
-  if (!_isExtensionAllowed(newPath)) {
-    throw new Error(`La nueva extensión para '${newName}' no está permitida.`);
+  if (!(await _isExtensionAllowed(newPath))) {
+    throw new Error(`New extension for '${newName}' is not allowed.`);
   }
 
-  // Evitar sobreescribir por error
+  // Prevent accidental overwrite
   try {
     await fs.access(newPath);
-    // Si no lanza error, el archivo ya existe
-    throw new Error(`El archivo de destino '${newName}' ya existe.`);
+    // If no error thrown, file exists
+    throw new Error(`Destination file '${newName}' already exists.`);
   } catch (error) {
-    // Si el error es 'ENOENT', significa que el archivo NO existe, lo cual es bueno.
+    // If error is 'ENOENT', it means file does NOT exist, which is good.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error; // Relanzar otros errores (como el de "archivo ya existe")
+      throw error; // Rethrow other errors
     }
   }
 
@@ -167,24 +160,24 @@ const _getFolderDetails = async (
 ): Promise<FileDetails[]> => {
   const folderPath = path.join(basePath, folderName);
 
-  // Verificar que el directorio base existe
+  // Verify base directory exists
   try {
     await fs.access(basePath);
   } catch (error) {
-    throw new Error(`El directorio base no existe: ${basePath}`);
+    throw new Error(`Base directory does not exist: ${basePath}`);
   }
 
-  // Verificar que el directorio objetivo existe
+  // Verify target directory exists
   try {
     const stats = await fs.stat(folderPath);
     if (!stats.isDirectory()) {
       throw new Error(
-        `La ruta especificada no es un directorio: ${folderPath}`,
+        `Specified path is not a directory: ${folderPath}`,
       );
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(`El directorio no existe: ${folderPath}`);
+      throw new Error(`Directory does not exist: ${folderPath}`);
     }
     throw error;
   }
@@ -204,14 +197,14 @@ const _getFolderDetails = async (
           isDirectory: entry.isDirectory(),
         };
       } catch (error) {
-        // Si hay error al obtener stats de un archivo específico, lo omitimos
-        console.warn(`No se pudo obtener información de: ${entryPath}`);
+        // If error getting stats for a specific file, skip it
+        console.warn(`Could not get information for: ${entryPath}`);
         return null;
       }
     }),
   );
 
-  // Filtrar entradas nulas
+  // Filter out null entries
   return details.filter((detail): detail is FileDetails => detail !== null);
 };
 
@@ -227,7 +220,7 @@ const _checkFileValidity = async (
   options?: { allowedExtensions?: string[]; maxSizeInBytes?: number },
 ): Promise<FileValidityReport> => {
   const extensions = options?.allowedExtensions ?? ALLOWED_EXTENSIONS;
-  const maxSize = options?.maxSizeInBytes ?? 1024 * 1024; // 1MB por defecto
+  const maxSize = options?.maxSizeInBytes ?? 1024 * 1024; // 1MB default
 
   const report: FileValidityReport = {
     exists: false,
@@ -244,27 +237,27 @@ const _checkFileValidity = async (
     if (extensions.includes(ext)) {
       report.isAllowedType = true;
     } else {
-      report.details.push(`Extensión '${ext}' no permitida.`);
+      report.details.push(`Extension '${ext}' not allowed.`);
     }
 
     if (stats.size <= maxSize) {
       report.isWithinSize = true;
     } else {
       report.details.push(
-        `El archivo excede el tamaño máximo (${stats.size} > ${maxSize} bytes).`,
+        `File exceeds maximum size (${stats.size} > ${maxSize} bytes).`,
       );
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      report.details.push("El archivo no existe.");
+      report.details.push("File does not exist.");
     } else {
-      throw error; // Relanzar errores inesperados
+      throw error; // Rethrow unexpected errors
     }
   }
 
   if (report.details.length > 0) {
-    // Si hay errores, lanzamos una excepción para que el asyncHandler la capture
-    // y la formatee como un error estándar.
+    // If there are errors, throw exception so asyncHandler captures it
+    // and formats it as a standard error.
     throw new Error(report.details.join(" "));
   }
 
@@ -307,84 +300,40 @@ const _verifyFileIntegrity = async (
   }
 };
 
-// --- API Pública Exportada ---
+// --- Exported Public API ---
 
 /**
- * Conjunto de utilidades para la manipulación de archivos y directorios de forma segura y asíncrona.
- * Todas las operaciones devuelven un objeto { success: boolean, ... }
+ * Set of utilities for safe and asynchronous file and directory manipulation.
+ * All operations return an object { success: boolean, ... }
  */
 export const FileUtils = {
-  /** Crea un archivo con contenido opcional, creando directorios si es necesario. */
+  /** Creates a file with optional content, creating directories if necessary. */
   createFile: asyncHandler(_createFile),
 
-  /** Lee el contenido de un archivo de texto. */
+  /** Reads the content of a text file. */
   readFile: asyncHandler(_readFile),
 
-  /** Escribe (o sobrescribe) contenido en un archivo. */
+  /** Writes (or overwrites) content to a file. */
   writeFile: asyncHandler(_writeFile),
 
-  /** Elimina un archivo o un directorio de forma recursiva. */
+  /** Recursively deletes a file or directory. */
   deletePath: asyncHandler(_deletePath),
 
-  /** Renombra un archivo. */
+  /** Renames a file. */
   renameFile: asyncHandler(_renameFile),
 
-  /** Obtiene una lista detallada del contenido de una carpeta. */
+  /** Gets a detailed list of folder content. */
   getFolderDetails: asyncHandler(_getFolderDetails),
 
-  /** Verifica si una ruta existe en el sistema de archivos. */
+  /** Checks if a path exists in the filesystem. */
   pathExists: asyncHandler(_pathExists),
 
-  /** Realiza una validación completa de un archivo (existencia, tipo, tamaño). */
+  /** Performs a full validation of a file (existence, type, size). */
   checkFileValidity: asyncHandler(_checkFileValidity),
 
-  /** Calcula el checksum de un archivo. */
+  /** Calculates the checksum of a file. */
   calculateChecksum: asyncHandler(_calculateChecksum),
 
-  /** Verifica la integridad de un archivo mediante su tamaño y checksum opcional. */
+  /** Verifies file integrity via size and optional checksum. */
   verifyFileIntegrity: asyncHandler(_verifyFileIntegrity),
 };
-/*
-// --- Ejemplo de Uso ---
-async function main() {
-    const awaitUtils = (time: number) => new Promise(resolve => setTimeout(resolve, time));
-  const basePath = "./temp-test";
-
-  console.log("--- Caso de Éxito: Crear y leer archivo ---");
-  const createResult = await FileUtils.createFile(
-    basePath,
-    "logs",
-    "app.log",
-    "Inicio del log."
-  );
-
-  if (isSuccess(createResult)) {
-    console.log("Archivo creado en:", createResult.data);
-
-    const readResult = await FileUtils.readFile(basePath, "logs", "app.log");
-    if (isSuccess(readResult)) {
-      console.log("Contenido leído:", readResult.data);
-    }
-  } else {
-    console.error("Error al crear:", createResult.error);
-  }
-
-  console.log("\n--- Caso de Error: Leer archivo inexistente ---");
-  const readFailResult = await FileUtils.readFile(
-    basePath,
-    "logs",
-    "non-existent.log"
-  );
-
-  if (!isSuccess(readFailResult)) {
-    console.error("Error esperado:", readFailResult.error);
-  }
-  await awaitUtils(10000);
-  // Limpieza
-  await FileUtils.deletePath(basePath, "");
-  console.log("\nDirectorio de prueba eliminado.");
-}
-
-// Descomenta la siguiente línea para ejecutar el ejemplo
-main();
-*/

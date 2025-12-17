@@ -1,14 +1,14 @@
 /**
- * Define la estructura de respuesta estándar para todas las operaciones.
- * Es una unión discriminada para un manejo de tipos seguro.
+ * Defines the standard response structure for all operations.
+ * It is a discriminated union for type-safe handling.
  */
 export type ServiceResponse<T> =
   | { success: true; data: T }
   | { success: false; error: string; data: T };
 
 /**
- * Crea una respuesta de éxito estandarizada.
- * @param data - Los datos a devolver en caso de éxito.
+ * Creates a standardized success response.
+ * @param data - The data to return upon success.
  */
 const createSuccessResponse = <T>(data: T): ServiceResponse<T> => ({
   success: true,
@@ -16,8 +16,9 @@ const createSuccessResponse = <T>(data: T): ServiceResponse<T> => ({
 });
 
 /**
- * Crea una respuesta de error estandarizada.
- * @param error - El mensaje de error.
+ * Creates a standardized error response.
+ * @param error - The error message.
+ * @param data - Optional data to return with the error (defaults to false cast as T).
  */
 const createErrorResponse = <T = unknown>(
   error: string,
@@ -27,6 +28,11 @@ const createErrorResponse = <T = unknown>(
   data,
   error,
 });
+
+/**
+ * Type guard to check if a response or boolean result is successful.
+ * @param result - The ServiceResponse or boolean to check.
+ */
 function isSuccess<T>(
   result: ServiceResponse<T> | boolean,
 ): result is (ServiceResponse<T> & { success: true }) | true {
@@ -35,4 +41,6 @@ function isSuccess<T>(
   }
   return result.success;
 }
+
 export { createSuccessResponse, createErrorResponse, isSuccess };
+

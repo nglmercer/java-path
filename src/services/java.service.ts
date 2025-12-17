@@ -47,7 +47,7 @@ const _getJavaInfoByVersion = async (
     throw new Error("La versión de Java no puede estar vacía.");
   }
 
-  // --- Caso Especial: Termux ---
+  // --- Termux ---
   if (env.isTermux()) {
     const packageName = `${TERMUX_CONSTANTS.PACKAGE_PREFIX}${versionStr}`;
     const packageCheckResult =
@@ -66,7 +66,7 @@ const _getJavaInfoByVersion = async (
     };
   }
 
-  // --- Caso Estándar: Windows, Linux, macOS ---
+  // --- Standard ---
   const arch = ADOPTIUM_ARCH_MAP[process.arch];
   if (!arch) {
     throw new Error(
@@ -82,7 +82,7 @@ const _getJavaInfoByVersion = async (
   const absoluteDownloadPath = path.resolve(relativeDownloadPath);
   const absoluteUnpackPath = path.resolve(relativeUnpackPath);
 
-  // --- Lógica mejorada para encontrar el 'bin' usando FileUtils ---
+  // --- Find 'bin' folder ---
   let javaBinPath = path.join(absoluteUnpackPath, FOLDER_NAMES.BIN);
 
   return {
