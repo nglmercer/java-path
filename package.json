@@ -1,5 +1,13 @@
 {
   "name": "java-path",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nglmercer/java-path"
+  },
+  "homepage": "https://github.com/nglmercer/java-path#readme",
+  "bugs": {
+    "url": "https://github.com/nglmercer/java-path/issues"
+  },
   "version": "1.0.5",
   "module": "./dist/index.js",
   "main": "./dist/index.js",

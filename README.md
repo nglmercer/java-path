@@ -1,5 +1,13 @@
 # Java-Path
 
+[![npm](https://img.shields.io/npm/v/java-path)](https://www.npmjs.com/package/java-path)
+[![GitHub](https://img.shields.io/github/stars/nglmercer/java-path?style=social)](https://github.com/nglmercer/java-path)
+
+**Links:**
+
+- [GitHub Repository](https://github.com/nglmercer/java-path)
+- [NPM Package](https://www.npmjs.com/package/java-path)
+
 A comprehensive TypeScript library for detecting, managing, and working with Java installations across different platforms (Windows, macOS, Linux, and Termux).
 
 ## Documentation
@@ -21,6 +29,21 @@ This project uses a modular documentation structure. Please refer to the specifi
 - **[File & Folder Utilities](./docs/api/files.md)**
 - **[Command Utilities](./docs/api/commands.md)**
 - **[Validation helpers](./docs/api/validation.md)**
+
+## Installation library
+
+To install `java-path`
+
+```bash
+# Using npm
+npm install java-path
+
+# Using bun
+bun install java-path
+
+# Using yarn
+yarn add java-path
+```
 
 ## License
 

@@ -1,12 +1,30 @@
-# Installation
+# Installation library
 
-To install `java-path` and its dependencies in your project, use [Bun](https://bun.sh):
+To install `java-path`
 
 ```bash
-bun install
+# npm install
+npm install java-path
+
+# bun install
+bun install java-path
+
+# yarn install
+yarn add java-path
 ```
 
 ## Requirements
 
-- **Runtime**: Bun v1.0.0 or later (Node.js compatibility is planned but Bun is the primary target).
+- **Runtime**: Node js v20.0.0 or later, Bun v1.0.0 or later
 - **OS**: Windows, macOS, Linux, or Android (via Termux).
+
+## Installation project
+
+```bash
+# npm install
+npm install
+# bun install
+bun install
+```
+
+- testing use bun:test only works with bun
