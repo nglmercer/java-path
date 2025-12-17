@@ -10,9 +10,13 @@ let taskManager = new TaskManager({
   unpackPath: defaultPaths.unpackPath,
   backupPath: defaultPaths.backupPath,
 });
-
+export interface TaskInstanceOptions {
+  logger?: boolean;
+  eventNames?: (keyof TaskEvents)[];
+  cb?: (eventName: keyof TaskEvents, task: any) => void;
+}
 // Function to recreate TaskManager with updated paths
-function recreateTaskManager() {
+function recreateTaskManager(options: TaskInstanceOptions = {}) {
   taskManager = new TaskManager({
     downloadPath: defaultPaths.downloadPath,
     unpackPath: defaultPaths.unpackPath,
@@ -20,13 +24,14 @@ function recreateTaskManager() {
   });
 
   // Re-attach event listeners
-  attachEventListeners();
-  return {taskManager};
+  attachEventListeners(options);
+  return { taskManager };
 }
 
 // Function to attach event listeners
-function attachEventListeners(logger?: boolean) {
-  const TaskEventsNames: (keyof TaskEvents)[] = [
+export function attachEventListeners(options: TaskInstanceOptions) {
+  const { logger = false, eventNames, cb } = options;
+  const TaskEventsNames: (keyof TaskEvents)[] = eventNames || [
     "task:created",
     "task:started",
     "task:progress",
@@ -38,16 +43,20 @@ function attachEventListeners(logger?: boolean) {
     taskManager.on(eventName, (task) => {
       const { payload, details, error, createdAt, updatedAt, ...showData } =
         task;
-      if (eventName !== "task:progress") {
+      if (logger && eventNames?.includes(eventName)) {
         console.log(`Event: ${eventName}`, task);
+      }
+      // Call the custom callback
+      if (cb){
+        cb(eventName, task);
       }
     });
   });
-  return {taskManager,TaskEventsNames};
+  return { taskManager, TaskEventsNames };
 }
 
 // Attach initial event listeners
-attachEventListeners();
+//attachEventListeners({});
 
 // Export the typed instance and update function
 export { taskManager, recreateTaskManager };

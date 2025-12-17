@@ -1,0 +1,297 @@
+# Java-Path Library Documentation
+
+## Overview
+Java-Path is a comprehensive TypeScript library for detecting, managing, and working with Java installations across different platforms (Windows, macOS, Linux, and Termux). It provides robust tools for platform detection, Java version management, file operations, and task management.
+
+## Installation
+
+```bash
+# Using npm
+npm install java-path
+
+# Using bun
+bun install java-path
+
+# Using yarn
+yarn add java-path
+```
+
+## Requirements
+- **Runtime**: Node.js v20.0.0 or later, Bun v1.0.0 or later
+- **OS**: Windows, macOS, Linux, or Android (via Termux)
+
+## Core Features
+
+### 1. Environment Detection (`env`)
+Platform and architecture detection utilities.
+
+```typescript
+import { env } from "java-path";
+
+// Platform information
+console.log(env.platform.name); // "windows", "linux", "mac", or "android"
+console.log(env.platform.ext);  // Platform executable extension
+console.log(env.arch);          // System architecture
+
+// Platform checks
+if (env.isWindows()) { /* Windows-specific code */ }
+if (env.isLinux()) { /* Linux-specific code */ }
+if (env.isMac()) { /* macOS-specific code */ }
+if (env.isTermux()) { /* Termux-specific code */ }
+```
+
+### 2. Java Information & Management
+Utilities for retrieving Java version info and finding installed JDKs.
+
+```typescript
+import { getJavaInfo, scanJavaInstallations, findJavaVersion } from "java-path";
+
+// Get Java metadata
+const info = await getJavaInfo(17);
+console.log(info.downloadUrl);
+
+// Scan for Java installations
+const installations = await scanJavaInstallations("/usr/lib/jvm");
+
+// Find specific Java version
+const java17 = await findJavaVersion("/usr/lib/jvm", 17, {
+  requireValid: true,
+  requireSameArch: true,
+});
+```
+
+### 3. Java Service (`JavaInfoService`)
+Advanced operations for fetching Java versions and downloading releases.
+
+```typescript
+import { JavaInfoService } from "java-path";
+
+// Get available Java versions
+const info = await JavaInfoService.getInstallableVersions();
+console.log(info.available); // [8, 11, 17, 21]
+
+// Filter specific release
+const release = await JavaInfoService.filter(info.releases, 17);
+
+// Download Java release
+const downloadTask = await JavaInfoService.downloadJavaRelease(
+  release,
+  "jdk-17.zip"
+);
+await downloadTask.data.promise;
+
+// Decompress downloaded archive
+await JavaInfoService.decompressJavaRelease(
+  "/downloads/jdk-17.zip",
+  "/unpacked/jdk-17"
+);
+```
+
+### 4. Task Manager
+Handles long-running async operations with progress tracking.
+
+```typescript
+import { taskManager } from "java-path";
+
+// Create backup
+const job = taskManager.createBackup("./data", {
+  outputFilename: "backup.zip",
+  useZip: true,
+});
+await job.promise;
+
+// Restore backup
+const restoreJob = taskManager.restoreBackup("./backups/data.zip", {
+  destination: "./restored",
+});
+
+// Unpack archive
+const unpackJob = taskManager.unpack("./download.zip", {
+  destination: "./output",
+});
+
+// Download file
+const downloadJob = taskManager.download("https://example.com/file.zip", {
+  fileName: "file.zip",
+});
+
+// Event listening
+taskManager.on("task:progress", (task) => {
+  console.log(`Task ${task.id}: ${task.progress}%`);
+});
+
+taskManager.on("task:completed", (task) => {
+  console.log(`Task ${task.id} finished!`);
+});
+```
+
+### 5. File & Folder Utilities
+File system helpers for common operations.
+
+```typescript
+import { FileUtils, FolderUtils } from "java-path";
+
+// File operations
+await FileUtils.writeFile(base, subDir, name, content);
+const exists = await FileUtils.pathExists(path);
+await FileUtils.delete(path);
+await FileUtils.rename(oldPath, newPath);
+
+// File validation
+await FileUtils.checkFileValidity("config.json", {
+  maxSize: 1024,
+  allowedExtensions: [".json"],
+});
+
+// Folder operations
+const details = await FolderUtils.getFolderDetails(path);
+const summary = await FolderUtils.getDirectorySummary(path);
+const javaFiles = await FolderUtils.getFiles("./src", {
+  extension: ".java",
+  recursive: true,
+});
+```
+
+### 6. Command Utilities
+System command execution and package management.
+
+```typescript
+import { CommandUtils } from "java-path";
+
+// Check command availability
+if (await CommandUtils.isCommandAvailable("java")) {
+  // Java is available
+}
+
+// Get package manager
+const manager = await CommandUtils.getPackageManager();
+
+// Check package installation
+const installed = await CommandUtils.isPackageInstalled("typescript");
+
+// Run commands
+const { stdout, stderr, exitCode } = await CommandUtils.runCommand("java", ["-version"]);
+
+// Detect Java installation paths
+const javaPaths = await CommandUtils.detectJavaPaths();
+console.log("Found Java installations:", javaPaths);
+
+// Validate Java path
+const isValid = await CommandUtils.validateJavaPath("/path/to/java");
+console.log("Java path is valid:", isValid);
+```
+
+**Synchronous versions:**
+```typescript
+import { detectJavaPathsSync, validateJavaPathSync } from "java-path";
+
+// Synchronously detect Java paths
+const javaPaths = detectJavaPathsSync();
+
+// Synchronously validate Java path
+const isValid = validateJavaPathSync("/path/to/java");
+```
+
+### 7. Validation Utilities
+Standardized response types for consistent API handling.
+
+```typescript
+import { createSuccessResponse, createErrorResponse, isSuccess } from "java-path";
+
+// Create responses
+const success = createSuccessResponse(data);
+const error = createErrorResponse("Error message", optionalData);
+
+// Type checking
+const result = await someService();
+if (isSuccess(result)) {
+  console.log(result.data); // Type-safe access
+} else {
+  console.error(result.error);
+}
+```
+
+## Configuration
+Customize default paths for downloads, unpacking, and backups.
+
+```typescript
+import { defaultPaths } from "java-path";
+import path from "node:path";
+
+// Update paths
+defaultPaths.update({
+  downloadPath: path.join(process.cwd(), "my-downloads"),
+  unpackPath: path.join(process.cwd(), "my-java-installs"),
+  backupPath: path.join(process.cwd(), "my-backups"),
+});
+
+// Reset to defaults
+// defaultPaths.reset();
+```
+
+## Project Structure
+```
+java-path/
+├── src/
+│   ├── platforms/     # Platform detection and Java logic
+│   ├── services/      # High-level services
+│   ├── utils/         # General utilities
+│   └── types/         # TypeScript definitions
+├── tests/             # Test files
+├── examples/          # Usage examples
+└── docs/              # Documentation
+```
+
+## Testing
+Uses Bun's built-in test runner.
+
+```bash
+# Run all tests
+bun test
+
+# Run tests in watch mode
+bun test --watch
+
+# Run tests with coverage
+bun test --coverage
+
+# Run specific test
+bun test tests/utils/file.test.ts
+```
+
+## CLI Commands
+Available bun scripts:
+
+| Command | Description |
+|---------|-------------|
+| `bun run index.ts` | Run main entry point |
+| `bun test` | Run all tests |
+| `bun test --watch` | Run tests in watch mode |
+| `bun test --coverage` | Run tests with coverage |
+| `bun run build` | Build for production |
+| `bun run examples/install.ts` | Run installation example |
+
+## Key Features Summary
+- **Platform Detection**: Auto-detect OS and architecture
+- **Java Version Management**: Scan, validate, and manage Java installations
+- **Termux Support**: Specialized Android/Termux handling
+- **File Integrity**: Automatic checksum and size verification
+- **Type Safety**: Full TypeScript support
+- **Async Task Management**: Progress tracking for long operations
+- **Cross-Platform**: Works on Windows, macOS, Linux, and Termux
+
+## API Reference Summary
+- **Environment (`env`)**: Platform and architecture detection
+- **Java Information**: Local Java installation management
+- **Java Service**: Remote Java repository operations
+- **Task Manager**: Async operation handling
+- **File & Folder Utils**: File system operations
+- **Command Utils**: Shell command execution and Java path detection
+- **Validation**: Standardized response types
+
+## New Java Path Detection Features
+- **detectJavaPaths()**: Automatically detect Java installation paths using system commands
+- **validateJavaPath()**: Validate if a Java path exists and is executable
+- **Cross-platform support**: Works on Windows, macOS, and Linux
+- **Multiple detection methods**: Uses `which`/`where` commands, JAVA_HOME, and common installation directories
+- **Synchronous and asynchronous versions**: Available for both sync and async usage

@@ -1,5 +1,6 @@
 import { exec, execSync, type ExecOptions ,type ExecSyncOptions} from "node:child_process";
 import { promisify } from "node:util";
+import * as path from "node:path";
 import { isWindows, isLinux } from "../platforms/env.js";
 import { asyncHandler } from "./file.js";
 
@@ -292,6 +293,188 @@ export function getLinuxDistroInfo(): LinuxDistroInfo | null {
 }
 
 /**
+ * Detects Java installation paths by executing system commands.
+ * Tries multiple methods to find Java installations.
+ * @returns Array of detected Java paths or empty array if none found.
+ */
+async function _detectJavaPaths(): Promise<string[]> {
+  const javaPaths: string[] = [];
+  
+  try {
+    // Method 1: Try 'which java' or 'where java'
+    const checkCmd = isWindows() ? "where" : "which";
+    const whichResult = await _runCommand(`${checkCmd} java`, { silent: true });
+    
+    if (whichResult && typeof whichResult === 'string') {
+      // Resolve symlinks and get the actual path
+      const realPath = await _runCommand(`realpath "${whichResult}"`, { silent: true }).catch(() => whichResult);
+      if (typeof realPath === 'string') {
+        javaPaths.push(realPath);
+      }
+    }
+  } catch {
+    // 'which java' failed, try other methods
+  }
+
+  try {
+    // Method 2: Try 'java -version' and parse JAVA_HOME
+    const versionResult = await _runCommandFull("java -version", { silent: true });
+    
+    // If java command works, try to get JAVA_HOME
+    if (versionResult.stdout || versionResult.stderr) {
+      try {
+        const javaHome = await _runCommand("echo $JAVA_HOME", { silent: true });
+        if (javaHome && typeof javaHome === 'string' && javaHome.trim()) {
+          const javaHomePath = javaHome.trim();
+          const javaExe = isWindows() ? "java.exe" : "java";
+          const javaBinPath = path.join(javaHomePath, "bin", javaExe);
+          
+          // Verify the path exists
+          try {
+            const checkCmd = isWindows() ? "where" : "test -x";
+            await _runCommand(`${checkCmd} "${javaBinPath}"`, { silent: true });
+            javaPaths.push(javaBinPath);
+          } catch {
+            // JAVA_HOME path doesn't exist
+          }
+        }
+      } catch {
+        // JAVA_HOME not set or invalid
+      }
+    }
+  } catch {
+    // java command not available
+  }
+
+  // Method 3: Check common installation directories (limited to avoid timeouts)
+  const commonPaths = isWindows()
+    ? [
+        "C:\\Program Files\\Java",
+        "C:\\Program Files (x86)\\Java",
+      ]
+    : isLinux()
+    ? [
+        "/usr/lib/jvm",
+      ]
+    : [
+        "/Library/Java/JavaVirtualMachines",
+      ];
+
+  for (const basePath of commonPaths) {
+    try {
+      // Quick check if directory exists first
+      const checkCmd = isWindows()
+        ? `if exist "${basePath}" echo exists`
+        : `test -d "${basePath}" && echo exists`;
+      
+      const existsResult = await _runCommand(checkCmd, { silent: true });
+      if (existsResult && typeof existsResult === 'string' && existsResult.includes('exists')) {
+        // Use find command to look for java executables (limited to 3 results)
+        const findCmd = isWindows()
+          ? `dir "${basePath}" /s /b 2>nul | findstr /i "bin\\\\java.exe" | head -3`
+          : `find "${basePath}" -name "java" -type f -executable 2>/dev/null | head -3`;
+        
+        const findResult = await _runCommand(findCmd, { silent: true });
+        if (findResult && typeof findResult === 'string') {
+          const paths = findResult.split("\n").filter((p: string) => p.trim());
+          javaPaths.push(...paths.map((p: string) => p.trim()));
+        }
+      }
+    } catch {
+      // Directory doesn't exist or find command failed
+    }
+  }
+
+  // Remove duplicates and filter out invalid paths
+  const uniquePaths = [...new Set(javaPaths)].filter(p => p && p.length > 0);
+  
+  return uniquePaths;
+}
+
+/**
+ * Synchronously detects Java installation paths.
+ * @returns Array of detected Java paths or empty array if none found.
+ */
+export function detectJavaPathsSync(): string[] {
+  const javaPaths: string[] = [];
+  
+  try {
+    // Method 1: Try 'which java' or 'where java'
+    const checkCmd = isWindows() ? "where" : "which";
+    const whichResult = runSync(`${checkCmd} java`, { silent: true });
+    
+    if (whichResult) {
+      javaPaths.push(whichResult);
+    }
+  } catch {
+    // 'which java' failed, try other methods
+  }
+
+  try {
+    // Method 2: Try to get JAVA_HOME
+    const javaHome = runSync("echo $JAVA_HOME", { silent: true });
+    if (javaHome && javaHome.trim()) {
+      const javaHomePath = javaHome.trim();
+      const javaExe = isWindows() ? "java.exe" : "java";
+      const javaBinPath = path.join(javaHomePath, "bin", javaExe);
+      javaPaths.push(javaBinPath);
+    }
+  } catch {
+    // JAVA_HOME not set or invalid
+  }
+
+  return [...new Set(javaPaths)].filter(p => p && p.length > 0);
+}
+
+/**
+ * Validates if a Java path exists and points to a valid Java executable.
+ * @param javaPath The path to validate.
+ * @returns True if the path exists and is executable, false otherwise.
+ */
+async function _validateJavaPath(javaPath: string): Promise<boolean> {
+  if (!javaPath || typeof javaPath !== 'string') {
+    return false;
+  }
+
+  try {
+    // Check if file exists and is executable
+    const checkCmd = isWindows() ? "where" : "test -x";
+    const command = isWindows()
+      ? `${checkCmd} "${javaPath}"`
+      : `${checkCmd} "${javaPath}" && echo "valid"`;
+    
+    await _runCommand(command, { silent: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Synchronously validates if a Java path exists.
+ * @param javaPath The path to validate.
+ * @returns True if the path exists and is executable, false otherwise.
+ */
+export function validateJavaPathSync(javaPath: string): boolean {
+  if (!javaPath || typeof javaPath !== 'string') {
+    return false;
+  }
+
+  try {
+    // Check if file exists and is executable
+    const checkCmd = isWindows() ? "where" : "test -x";
+    const command = isWindows()
+      ? `${checkCmd} "${javaPath}"`
+      : `${checkCmd} "${javaPath}" && echo "valid"`;
+    
+    runSync(command, { silent: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Utilities for executing system commands.
  */
 export const CommandUtils = {
@@ -303,4 +486,12 @@ export const CommandUtils = {
    * runs a command and returns both stdout and stderr
    */
   execute: asyncHandler(_runCommandFull),
+  /**
+   * Detects Java installation paths
+   */
+  detectJavaPaths: asyncHandler(_detectJavaPaths),
+  /**
+   * Validates if a Java path exists and is executable
+   */
+  validateJavaPath: asyncHandler(_validateJavaPath),
 };
